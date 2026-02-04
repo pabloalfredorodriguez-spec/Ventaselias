@@ -134,7 +134,7 @@ app.get("/admin", async (req,res)=>{
     <h2>Dashboard Ventas</h2>
     <div>Caja actual: \${formatGs(saldo)}</div>
     <h3>Productos</h3>
-    <ul>\${productos.map(p=>\`<li>\${p.nombre} - Stock: \${p.stock} - Precio: \${formatGs(p.precio_unitario)}\${p.precio_mayorista? " - Mayorista: "+formatGs(p.precio_mayorista):""}</li>\`).join('')}</ul>
+    <ul>\${productos.map(p=>`<li>${p.nombre} - Stock: ${p.stock} - Precio: ${formatGs(p.precio_unitario)}${p.precio_mayorista? " - Mayorista: "+formatGs(p.precio_mayorista):"}</li>`).join('')}</ul>
     <h3>Clientes</h3>
     <ul>\${clientes.map(c=>\`<li>\${c.nombre} (\${c.tipo})</li>\`).join('')}</ul>
     </body></html>
