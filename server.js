@@ -1,3 +1,8 @@
+// ====================== ROOT REDIRECT ======================
+app.get("/", (req, res) => {
+  res.redirect("/login");
+});
+
 // ====================== IMPORTS ======================
 const express = require("express");
 const session = require("express-session");
