@@ -109,3 +109,28 @@ const today = () => new Date().toISOString().split("T")[0];
 const ADMIN = { user: "admin", pass: "1234" };
 
 app.get("/login", (req, res) => {
+  res.send(`
+  <html>
+    <body>
+      <h2>Login Ventas</h2>
+      <form method="POST" action="/login">
+        <input name="user" placeholder="Usuario" required>
+        <input name="pass" type="password" placeholder="Contraseña" required>
+        <button>Ingresar</button>
+      </form>
+    </body>
+  </html>
+  `);
+});
+
+app.post("/login", (req, res) => {
+  const { user, pass } = req.body;
+  if (user === ADMIN.user && pass === ADMIN.pass) {
+    req.session.admin = true;
+    res.redirect("/admin");
+  } else {
+    res.send(
+      "<script>alert('Credenciales incorrectas');window.location='/login';</script>"
+    );
+  }
+});
