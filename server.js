@@ -1,8 +1,3 @@
-// ====================== ROOT REDIRECT ======================
-app.get("/", (req, res) => {
-  res.redirect("/login");
-});
-
 // ====================== IMPORTS ======================
 const express = require("express");
 const session = require("express-session");
@@ -25,18 +20,20 @@ app.use(
   })
 );
 
-// ====================== DB ======================
-const DATABASE_URL =
-  process.env.DATABASE_URL || "postgres://postgres:1234@localhost:5432/ventaselias";
+// ====================== DATABASE ======================
+const DATABASE_URL = process.env.DATABASE_URL;
 
 const pool = new Pool({
   connectionString: DATABASE_URL,
-  ssl: DATABASE_URL.includes("localhost") ? false : { rejectUnauthorized: false },
+  ssl: DATABASE_URL && !DATABASE_URL.includes("localhost") ? { rejectUnauthorized: false } : false,
 });
 
 // ====================== INIT DB ======================
 async function initDB() {
   try {
+    await pool.connect();
+    console.log("Conexión a la DB OK");
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS clientes (
         id SERIAL PRIMARY KEY,
@@ -46,6 +43,7 @@ async function initDB() {
         telefono TEXT
       )
     `);
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS productos (
         id SERIAL PRIMARY KEY,
@@ -56,6 +54,7 @@ async function initDB() {
         stock INTEGER DEFAULT 0
       )
     `);
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS ventas (
         id SERIAL PRIMARY KEY,
@@ -65,6 +64,7 @@ async function initDB() {
         tipo TEXT NOT NULL DEFAULT 'contado'
       )
     `);
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS detalle_ventas (
         id SERIAL PRIMARY KEY,
@@ -74,6 +74,7 @@ async function initDB() {
         precio_unitario NUMERIC
       )
     `);
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS cuotas_ventas (
         id SERIAL PRIMARY KEY,
@@ -85,6 +86,7 @@ async function initDB() {
         fecha_pago DATE
       )
     `);
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS caja (
         id SERIAL PRIMARY KEY,
@@ -94,6 +96,7 @@ async function initDB() {
         fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
     console.log("DB inicializada correctamente");
   } catch (err) {
     console.error("Error inicializando DB:", err.message);
@@ -136,6 +139,11 @@ app.post("/login", (req, res) => {
   }
 });
 
+// ====================== ROOT REDIRECT ======================
+app.get("/", (req, res) => {
+  res.redirect("/login");
+});
+
 // ====================== ADMIN DASHBOARD ======================
 app.get("/admin", async (req, res) => {
   if (!req.session.admin) return res.redirect("/login");
@@ -148,7 +156,6 @@ app.get("/admin", async (req, res) => {
     const caja = (await pool.query("SELECT * FROM caja")).rows;
     const cuotas = (await pool.query("SELECT * FROM cuotas_ventas")).rows;
 
-    // Calcular caja
     let ingresos = 0,
       egresos = 0;
     caja.forEach((m) =>
@@ -156,7 +163,6 @@ app.get("/admin", async (req, res) => {
     );
     const saldo = ingresos - egresos;
 
-    // Generar dashboard completo
     res.send(`
       <html>
         <body>
