@@ -20,20 +20,37 @@ app.use(
   })
 );
 
-// ====================== DATABASE ======================
-const DATABASE_URL = process.env.DATABASE_URL;
+// ====================== ROOT REDIRECT ======================
+app.get("/", (req, res) => {
+  res.redirect("/login");
+});
+
+// ====================== DB ======================
+const DATABASE_URL =
+  process.env.DATABASE_URL ||
+  "postgres://postgres:1234@localhost:5432/ventaselias";
 
 const pool = new Pool({
   connectionString: DATABASE_URL,
-  ssl: DATABASE_URL && !DATABASE_URL.includes("localhost") ? { rejectUnauthorized: false } : false,
+  ssl: DATABASE_URL.includes("localhost")
+    ? false
+    : { rejectUnauthorized: false },
 });
+
+// ====================== TEST DB CONNECTION ======================
+pool
+  .connect()
+  .then((client) => {
+    console.log("✅ Conexión a la DB exitosa");
+    client.release();
+  })
+  .catch((err) => {
+    console.error("❌ Error conectando a la DB:", err.message);
+  });
 
 // ====================== INIT DB ======================
 async function initDB() {
   try {
-    await pool.connect();
-    console.log("Conexión a la DB OK");
-
     await pool.query(`
       CREATE TABLE IF NOT EXISTS clientes (
         id SERIAL PRIMARY KEY,
@@ -43,7 +60,6 @@ async function initDB() {
         telefono TEXT
       )
     `);
-
     await pool.query(`
       CREATE TABLE IF NOT EXISTS productos (
         id SERIAL PRIMARY KEY,
@@ -54,7 +70,6 @@ async function initDB() {
         stock INTEGER DEFAULT 0
       )
     `);
-
     await pool.query(`
       CREATE TABLE IF NOT EXISTS ventas (
         id SERIAL PRIMARY KEY,
@@ -64,7 +79,6 @@ async function initDB() {
         tipo TEXT NOT NULL DEFAULT 'contado'
       )
     `);
-
     await pool.query(`
       CREATE TABLE IF NOT EXISTS detalle_ventas (
         id SERIAL PRIMARY KEY,
@@ -74,7 +88,6 @@ async function initDB() {
         precio_unitario NUMERIC
       )
     `);
-
     await pool.query(`
       CREATE TABLE IF NOT EXISTS cuotas_ventas (
         id SERIAL PRIMARY KEY,
@@ -86,7 +99,6 @@ async function initDB() {
         fecha_pago DATE
       )
     `);
-
     await pool.query(`
       CREATE TABLE IF NOT EXISTS caja (
         id SERIAL PRIMARY KEY,
@@ -96,10 +108,9 @@ async function initDB() {
         fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
-
     console.log("DB inicializada correctamente");
   } catch (err) {
-    console.error("Error inicializando DB:", err.message);
+    console.error("❌ Error inicializando DB:", err.message);
   }
 }
 initDB();
@@ -137,11 +148,6 @@ app.post("/login", (req, res) => {
       "<script>alert('Credenciales incorrectas');window.location='/login';</script>"
     );
   }
-});
-
-// ====================== ROOT REDIRECT ======================
-app.get("/", (req, res) => {
-  res.redirect("/login");
 });
 
 // ====================== ADMIN DASHBOARD ======================
@@ -229,7 +235,6 @@ app.get("/admin", async (req, res) => {
               )
               .join("")}
           </ul>
-
         </body>
       </html>
     `);
