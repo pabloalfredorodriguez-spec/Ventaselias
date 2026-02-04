@@ -25,10 +25,12 @@ app.get("/", (req, res) => {
   res.redirect("/login");
 });
 
-// ====================== DB ======================
-const DATABASE_URL =
-  process.env.DATABASE_URL ||
-  "postgres://postgres:1234@localhost:5432/ventaselias";
+// ====================== DATABASE ======================
+const DATABASE_URL = process.env.DATABASE_URL;
+if (!DATABASE_URL) {
+  console.error("Error: Environment variable DATABASE_URL no definida");
+  process.exit(1);
+}
 
 const pool = new Pool({
   connectionString: DATABASE_URL,
@@ -36,17 +38,6 @@ const pool = new Pool({
     ? false
     : { rejectUnauthorized: false },
 });
-
-// ====================== TEST DB CONNECTION ======================
-pool
-  .connect()
-  .then((client) => {
-    console.log("✅ Conexión a la DB exitosa");
-    client.release();
-  })
-  .catch((err) => {
-    console.error("❌ Error conectando a la DB:", err.message);
-  });
 
 // ====================== INIT DB ======================
 async function initDB() {
@@ -110,7 +101,7 @@ async function initDB() {
     `);
     console.log("DB inicializada correctamente");
   } catch (err) {
-    console.error("❌ Error inicializando DB:", err.message);
+    console.error("Error inicializando DB:", err.message);
   }
 }
 initDB();
@@ -173,7 +164,6 @@ app.get("/admin", async (req, res) => {
       <html>
         <body>
           <h2>Dashboard Ventas</h2>
-
           <h3>Caja</h3>
           <div>Ingresos: ${formatGs(ingresos)}</div>
           <div>Egresos: ${formatGs(egresos)}</div>
