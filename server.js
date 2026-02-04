@@ -21,16 +21,12 @@ app.use(
 );
 
 // ====================== DB ======================
-// URL de la base de datos, con fallback seguro
 const DATABASE_URL =
-  process.env.DATABASE_URL ||
-  "postgres://postgres:1234@localhost:5432/ventas"; // Ajusta a tu base local si quieres probar
+  process.env.DATABASE_URL || "postgres://postgres:1234@localhost:5432/ventaselias";
 
 const pool = new Pool({
   connectionString: DATABASE_URL,
-  ssl: DATABASE_URL.includes("localhost")
-    ? false
-    : { rejectUnauthorized: false },
+  ssl: DATABASE_URL.includes("localhost") ? false : { rejectUnauthorized: false },
 });
 
 // ====================== INIT DB ======================
@@ -110,16 +106,16 @@ const ADMIN = { user: "admin", pass: "1234" };
 
 app.get("/login", (req, res) => {
   res.send(`
-  <html>
-    <body>
-      <h2>Login Ventas</h2>
-      <form method="POST" action="/login">
-        <input name="user" placeholder="Usuario" required>
-        <input name="pass" type="password" placeholder="Contraseña" required>
-        <button>Ingresar</button>
-      </form>
-    </body>
-  </html>
+    <html>
+      <body>
+        <h2>Login Ventas</h2>
+        <form method="POST" action="/login">
+          <input name="user" placeholder="Usuario" required>
+          <input name="pass" type="password" placeholder="Contraseña" required>
+          <button>Ingresar</button>
+        </form>
+      </body>
+    </html>
   `);
 });
 
@@ -134,3 +130,106 @@ app.post("/login", (req, res) => {
     );
   }
 });
+
+// ====================== ADMIN DASHBOARD ======================
+app.get("/admin", async (req, res) => {
+  if (!req.session.admin) return res.redirect("/login");
+
+  try {
+    const clientes = (await pool.query("SELECT * FROM clientes")).rows;
+    const productos = (await pool.query("SELECT * FROM productos")).rows;
+    const ventas = (await pool.query("SELECT * FROM ventas")).rows;
+    const detalle = (await pool.query("SELECT * FROM detalle_ventas")).rows;
+    const caja = (await pool.query("SELECT * FROM caja")).rows;
+    const cuotas = (await pool.query("SELECT * FROM cuotas_ventas")).rows;
+
+    // Calcular caja
+    let ingresos = 0,
+      egresos = 0;
+    caja.forEach((m) =>
+      m.tipo === "ingreso" ? (ingresos += +m.monto) : (egresos += +m.monto)
+    );
+    const saldo = ingresos - egresos;
+
+    // Generar dashboard completo
+    res.send(`
+      <html>
+        <body>
+          <h2>Dashboard Ventas</h2>
+
+          <h3>Caja</h3>
+          <div>Ingresos: ${formatGs(ingresos)}</div>
+          <div>Egresos: ${formatGs(egresos)}</div>
+          <div>Saldo: ${formatGs(saldo)}</div>
+
+          <h3>Productos</h3>
+          <ul>
+            ${productos
+              .map(
+                (p) =>
+                  `<li>${p.nombre} - Stock: ${p.stock} - Precio: ${formatGs(
+                    p.precio_unitario
+                  )}${p.precio_mayorista ? ' - Mayorista: ' + formatGs(p.precio_mayorista) : ''}</li>`
+              )
+              .join("")}
+          </ul>
+
+          <h3>Clientes</h3>
+          <ul>
+            ${clientes.map((c) => `<li>${c.nombre} (${c.tipo})</li>`).join("")}
+          </ul>
+
+          <h3>Ventas</h3>
+          <ul>
+            ${ventas
+              .map(
+                (v) =>
+                  `<li>ID: ${v.id} - Cliente: ${
+                    clientes.find((c) => c.id === v.cliente_id)?.nombre || "N/A"
+                  } - Total: ${formatGs(v.total)} - Tipo: ${v.tipo} - Fecha: ${formatDate(
+                    v.fecha
+                  )}</li>`
+              )
+              .join("")}
+          </ul>
+
+          <h3>Detalle Ventas</h3>
+          <ul>
+            ${detalle
+              .map(
+                (d) =>
+                  `<li>Venta ID: ${d.venta_id} - Producto ID: ${d.producto_id} - Cantidad: ${d.cantidad} - Precio Unitario: ${formatGs(
+                    d.precio_unitario
+                  )}</li>`
+              )
+              .join("")}
+          </ul>
+
+          <h3>Cuotas de Ventas</h3>
+          <ul>
+            ${cuotas
+              .map(
+                (c) =>
+                  `<li>Venta ID: ${c.venta_id} - Nº: ${c.numero} - Monto: ${formatGs(
+                    c.monto
+                  )} - Vencimiento: ${formatDate(c.fecha_vencimiento)} - Pagada: ${
+                    c.pagada ? "Sí" : "No"
+                  } - Fecha Pago: ${formatDate(c.fecha_pago)}</li>`
+              )
+              .join("")}
+          </ul>
+
+        </body>
+      </html>
+    `);
+  } catch (err) {
+    res.send(`<h2>Error cargando dashboard:</h2><pre>${err.message}</pre>`);
+  }
+});
+
+// ====================== START SERVER ======================
+const server = app.listen(PORT, "0.0.0.0", () => {
+  console.log("Servidor ventas activo en puerto", PORT);
+});
+server.keepAliveTimeout = 120000;
+server.headersTimeout = 120000;
