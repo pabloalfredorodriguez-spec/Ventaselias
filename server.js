@@ -25,12 +25,12 @@ app.get("/", (req, res) => {
   res.redirect("/login");
 });
 
-// ====================== DB ======================
+// ====================== DATABASE ======================
 const DATABASE_URL = process.env.DATABASE_URL;
 
 if (!DATABASE_URL) {
-  console.error("❌ ERROR: DATABASE_URL no definida");
-  process.exit(1); // Para no iniciar si no hay URL
+  console.error("❌ ERROR: Environment variable DATABASE_URL no definida.");
+  process.exit(1);
 }
 
 const pool = new Pool({
@@ -50,7 +50,9 @@ async function initDB() {
         tipo TEXT NOT NULL DEFAULT 'mostrador',
         documento TEXT,
         telefono TEXT
-      );
+      )
+    `);
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS productos (
         id SERIAL PRIMARY KEY,
         nombre TEXT NOT NULL,
@@ -58,21 +60,27 @@ async function initDB() {
         precio_unitario NUMERIC NOT NULL,
         precio_mayorista NUMERIC,
         stock INTEGER DEFAULT 0
-      );
+      )
+    `);
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS ventas (
         id SERIAL PRIMARY KEY,
         cliente_id INTEGER REFERENCES clientes(id),
         total NUMERIC,
         fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         tipo TEXT NOT NULL DEFAULT 'contado'
-      );
+      )
+    `);
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS detalle_ventas (
         id SERIAL PRIMARY KEY,
         venta_id INTEGER REFERENCES ventas(id),
         producto_id INTEGER REFERENCES productos(id),
         cantidad INTEGER,
         precio_unitario NUMERIC
-      );
+      )
+    `);
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS cuotas_ventas (
         id SERIAL PRIMARY KEY,
         venta_id INTEGER REFERENCES ventas(id),
@@ -81,14 +89,16 @@ async function initDB() {
         fecha_vencimiento DATE,
         pagada BOOLEAN DEFAULT false,
         fecha_pago DATE
-      );
+      )
+    `);
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS caja (
         id SERIAL PRIMARY KEY,
         tipo TEXT,
         monto NUMERIC,
         descripcion TEXT,
         fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
+      )
     `);
     console.log("✅ DB inicializada correctamente");
   } catch (err) {
@@ -155,6 +165,7 @@ app.get("/admin", async (req, res) => {
       <html>
         <body>
           <h2>Dashboard Ventas</h2>
+
           <h3>Caja</h3>
           <div>Ingresos: ${formatGs(ingresos)}</div>
           <div>Egresos: ${formatGs(egresos)}</div>
@@ -167,7 +178,7 @@ app.get("/admin", async (req, res) => {
                 (p) =>
                   `<li>${p.nombre} - Stock: ${p.stock} - Precio: ${formatGs(
                     p.precio_unitario
-                  )}${p.precio_mayorista ? ' - Mayorista: ' + formatGs(p.precio_mayorista) : ''}</li>`
+                  )}${p.precio_mayorista ? " - Mayorista: " + formatGs(p.precio_mayorista) : ""}</li>`
               )
               .join("")}
           </ul>
