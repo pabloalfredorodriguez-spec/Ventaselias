@@ -391,17 +391,90 @@ app.get("/admin/ventas/:id", async (req,res)=>{
   `);
 });
 
-// ====================== RUTAS CAJA ======================
+// ====================== RUTAS CAJA MEJORADA ======================
 app.get("/admin/caja", async (req,res)=>{
   if(!req.session.admin) return res.redirect("/login");
-  const caja = (await pool.query(`SELECT * FROM caja ORDER BY id DESC`)).rows;
-  res.send(`
-    <h2>Caja</h2>
-    <a href="/admin">⬅ Volver</a>
-    <ul>
-      ${caja.map(c=>`<li>${c.fecha} - ${c.tipo} - ${formatGs(c.monto)} - ${c.descripcion || ''}</li>`).join("")}
-    </ul>
-  `);
+
+  try {
+    const caja = (await pool.query(`SELECT * FROM caja ORDER BY id DESC`)).rows;
+
+    // Calcular saldo actual
+    let saldo = 0;
+    caja.forEach(c => {
+      if(c.tipo === 'ingreso') saldo += Number(c.monto);
+      if(c.tipo === 'egreso') saldo -= Number(c.monto);
+    });
+
+    res.send(`
+      <html>
+        <body>
+          <h2>Caja</h2>
+          <a href="/admin">⬅ Volver</a>
+          <h3>Saldo actual: ${formatGs(saldo)}</h3>
+          
+          <h3>Agregar Movimiento</h3>
+          <form method="POST" action="/admin/caja">
+            <select name="tipo" required>
+              <option value="ingreso">Ingreso</option>
+              <option value="egreso">Egreso</option>
+            </select>
+            <input type="number" step="0.01" name="monto" placeholder="Monto" required>
+            <input type="text" name="descripcion" placeholder="Descripción" required>
+            <button>Agregar</button>
+          </form>
+          
+          <h3>Movimientos</h3>
+          <ul>
+            ${caja.map(c => `
+              <li>
+                ${c.fecha} - ${c.tipo === 'ingreso' ? '💰' : '📤'} ${formatGs(c.monto)} - ${c.descripcion || ''}
+                <a href="/admin/caja/${c.id}">🔍 Detalle</a>
+              </li>
+            `).join("")}
+          </ul>
+        </body>
+      </html>
+    `);
+  } catch(err){
+    res.send(`<h2>Error cargando caja:</h2><pre>${err.message}</pre>`);
+  }
+});
+
+// Ruta POST para agregar ingresos/egresos manuales
+app.post("/admin/caja", async (req,res)=>{
+  if(!req.session.admin) return res.redirect("/login");
+  try {
+    const { tipo, monto, descripcion } = req.body;
+    await pool.query(
+      "INSERT INTO caja(tipo, monto, descripcion) VALUES($1,$2,$3)",
+      [tipo, monto, descripcion]
+    );
+    res.redirect("/admin/caja");
+  } catch(err){
+    res.send(`<h2>Error agregando movimiento:</h2><pre>${err.message}</pre>`);
+  }
+});
+
+// Ruta para ver detalle de un movimiento específico
+app.get("/admin/caja/:id", async (req,res)=>{
+  if(!req.session.admin) return res.redirect("/login");
+  try {
+    const { id } = req.params;
+    const movimiento = (await pool.query("SELECT * FROM caja WHERE id=$1",[id])).rows[0];
+    if(!movimiento) return res.send("<h2>Movimiento no encontrado</h2>");
+    
+    res.send(`
+      <h2>Detalle Movimiento</h2>
+      <p>ID: ${movimiento.id}</p>
+      <p>Fecha: ${movimiento.fecha}</p>
+      <p>Tipo: ${movimiento.tipo}</p>
+      <p>Monto: ${formatGs(movimiento.monto)}</p>
+      <p>Descripción: ${movimiento.descripcion || '-'}</p>
+      <a href="/admin/caja">⬅ Volver a Caja</a>
+    `);
+  } catch(err){
+    res.send(`<h2>Error mostrando detalle:</h2><pre>${err.message}</pre>`);
+  }
 });
 
 // ====================== RUTAS CUOTAS ======================
