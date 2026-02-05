@@ -183,7 +183,7 @@ app.get("/admin", async (req, res) => {
             <li><a href="/admin/registrar-venta">➕ Registrar Venta</a></li>
             <li><a href="/admin/ventas">📄 Ventas</a></li>
             <li><a href="/admin/caja">💰 Caja</a></li>
-            <li><a href="/admin/cuotas">🧾 Cuotas</a></li>
+            <li><a href="/admin/creditos">💳 Créditos pendientes</a></li>
           </ul>
           <hr/>
 
