@@ -93,6 +93,103 @@ app.post("/login", (req, res) => {
 });
 
 // ====================== ADMIN DASHBOARD ======================
+// ====================== REGISTRAR VENTA ======================
+app.get("/admin/registrar-venta", async (req, res) => {
+  if (!req.session.admin) return res.redirect("/login");
+
+  const clientes = (await pool.query("SELECT * FROM clientes")).rows;
+  const productos = (await pool.query("SELECT * FROM productos")).rows;
+
+  res.send(`
+    <html>
+      <body>
+        <h2>Registrar Venta</h2>
+        <form method="POST" action="/admin/registrar-venta">
+          <label>Cliente:</label>
+          <select name="cliente_id" required>
+            ${clientes.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('')}
+          </select><br/><br/>
+          
+          <label>Tipo de venta:</label>
+          <select name="tipo" required>
+            <option value="contado">Contado</option>
+            <option value="credito">Crédito</option>
+          </select><br/><br/>
+          
+          <h3>Productos</h3>
+          ${productos.map(p => `
+            <label>${p.nombre} (Stock: ${p.stock}) - Precio: ${formatGs(p.precio_unitario)}</label>
+            <input type="number" name="producto_${p.id}" value="0" min="0" max="${p.stock}"><br/>
+          `).join('')}
+          <br/>
+          <button>Registrar Venta</button>
+        </form>
+      </body>
+    </html>
+  `);
+});
+
+app.post("/admin/registrar-venta", async (req, res) => {
+  if (!req.session.admin) return res.redirect("/login");
+
+  try {
+    const { cliente_id, tipo } = req.body;
+    const productos = (await pool.query("SELECT * FROM productos")).rows;
+
+    // Filtrar productos con cantidad > 0
+    const items = productos
+      .map(p => ({ ...p, cantidad: Number(req.body['producto_' + p.id] || 0) }))
+      .filter(p => p.cantidad > 0);
+
+    if (items.length === 0) return res.send("<script>alert('Debe seleccionar al menos un producto');window.history.back();</script>");
+
+    // Calcular total
+    const total = items.reduce((sum, p) => sum + p.precio_unitario * p.cantidad, 0);
+
+    // Insertar venta
+    const ventaRes = await pool.query(
+      "INSERT INTO ventas(cliente_id, total, tipo) VALUES($1,$2,$3) RETURNING id",
+      [cliente_id, total, tipo]
+    );
+    const venta_id = ventaRes.rows[0].id;
+
+    // Insertar detalle de venta y actualizar stock
+    for (const p of items) {
+      await pool.query(
+        "INSERT INTO detalle_ventas(venta_id, producto_id, cantidad, precio_unitario) VALUES($1,$2,$3,$4)",
+        [venta_id, p.id, p.cantidad, p.precio_unitario]
+      );
+      await pool.query(
+        "UPDATE productos SET stock = stock - $1 WHERE id = $2",
+        [p.cantidad, p.id]
+      );
+    }
+
+    // Registrar en caja si es contado
+    if (tipo === "contado") {
+      await pool.query(
+        "INSERT INTO caja(tipo, monto, descripcion) VALUES($1,$2,$3)",
+        ["ingreso", total, `Venta ID ${venta_id} - Cliente ID ${cliente_id}`]
+      );
+    }
+
+    // Registrar cuotas si es crédito (3 cuotas semanales ejemplo)
+    if (tipo === "credito") {
+      const fecha = new Date();
+      for (let i = 1; i <= 3; i++) {
+        const fecha_vencimiento = new Date(fecha.getTime() + i * 7 * 24 * 60 * 60 * 1000);
+        await pool.query(
+          "INSERT INTO cuotas_ventas(venta_id, numero, monto, fecha_vencimiento) VALUES($1,$2,$3,$4)",
+          [venta_id, i, total / 3, fecha_vencimiento.toISOString().split('T')[0]]
+        );
+      }
+    }
+
+    res.send("<script>alert('Venta registrada correctamente');window.location='/admin';</script>");
+  } catch (err) {
+    res.send(`<h2>Error registrando venta:</h2><pre>${err.message}</pre>`);
+  }
+});
 app.get("/admin", async (req, res) => {
   if (!req.session.admin) return res.redirect("/login");
 
