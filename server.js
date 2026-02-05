@@ -50,6 +50,46 @@ async function initDB() {
         stock INTEGER DEFAULT 0
       )
     `);
+        await pool.query(`
+      CREATE TABLE IF NOT EXISTS ventas (
+        id SERIAL PRIMARY KEY,
+        cliente_id INTEGER REFERENCES clientes(id),
+        fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        total NUMERIC NOT NULL,
+        tipo TEXT NOT NULL
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS detalle_ventas (
+        id SERIAL PRIMARY KEY,
+        venta_id INTEGER REFERENCES ventas(id) ON DELETE CASCADE,
+        producto_id INTEGER REFERENCES productos(id),
+        cantidad INTEGER NOT NULL,
+        precio_unitario NUMERIC NOT NULL
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS caja (
+        id SERIAL PRIMARY KEY,
+        fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        tipo TEXT NOT NULL,
+        monto NUMERIC NOT NULL,
+        descripcion TEXT
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS cuotas_ventas (
+        id SERIAL PRIMARY KEY,
+        venta_id INTEGER REFERENCES ventas(id) ON DELETE CASCADE,
+        numero INTEGER NOT NULL,
+        monto NUMERIC NOT NULL,
+        fecha_vencimiento DATE NOT NULL,
+        pagada BOOLEAN DEFAULT false
+      )
+    `);
     console.log("DB inicializada correctamente");
   } catch (err) {
     console.error("Error inicializando DB:", err.message);
