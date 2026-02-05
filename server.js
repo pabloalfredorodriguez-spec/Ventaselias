@@ -109,6 +109,17 @@ await pool.query(`ALTER TABLE productos ADD COLUMN IF NOT EXISTS utilidad NUMERI
     console.error("Error inicializando DB:", err.message);
   }
 }
+// ===================== NUEVA TABLA PAGOS PARCIALES =====================
+await pool.query(`
+  CREATE TABLE IF NOT EXISTS pagos_credito (
+    id SERIAL PRIMARY KEY,
+    cuota_id INTEGER REFERENCES cuotas_ventas(id) ON DELETE CASCADE,
+    monto NUMERIC NOT NULL,
+    descripcion TEXT,
+    fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+
 
 // ====================== HELPERS ======================
 const formatGs = (n) => "Gs. " + Number(n).toLocaleString("es-PY");
@@ -531,23 +542,89 @@ app.get("/admin/caja/:id", async (req,res)=>{
   }
 });
 
-// ====================== RUTAS CUOTAS ======================
-app.get("/admin/cuotas", async (req,res)=>{
-  if(!req.session.admin) return res.redirect("/login");
-  const cuotas = (await pool.query(`
-    SELECT q.*, v.cliente_id, c.nombre AS cliente
-    FROM cuotas_ventas q
-    JOIN ventas v ON v.id=q.venta_id
-    LEFT JOIN clientes c ON c.id=v.cliente_id
-    ORDER BY q.fecha_vencimiento ASC
-  `)).rows;
-  res.send(`
-    <h2>Cuotas</h2>
-    <a href="/admin">⬅ Volver</a>
-    <ul>
-      ${cuotas.map(q=>`<li>Cuota #${q.numero} - ${q.cliente || "Mostrador"} - ${formatGs(q.monto)} - ${q.fecha_vencimiento} - ${q.pagada?'✅ Pagada':'❌ Pendiente'}</li>`).join("")}
-    </ul>
-  `);
+// ====================== CRÉDITOS PENDIENTES ======================
+app.get("/admin/creditos", async (req, res) => {
+  if (!req.session.admin) return res.redirect("/login");
+
+  try {
+    // Traer créditos (una sola cuota por venta)
+    const creditos = (await pool.query(`
+      SELECT q.id AS cuota_id, q.venta_id, v.cliente_id, c.nombre AS cliente,
+             q.monto, q.pagada,
+             COALESCE(SUM(pago.monto),0) AS pagado,
+             (q.monto - COALESCE(SUM(pago.monto),0)) AS saldo
+      FROM cuotas_ventas q
+      JOIN ventas v ON v.id = q.venta_id
+      LEFT JOIN clientes c ON c.id = v.cliente_id
+      LEFT JOIN pagos_credito pago ON pago.cuota_id = q.id
+      GROUP BY q.id, v.cliente_id, c.nombre
+      ORDER BY q.id ASC
+    `)).rows;
+
+    res.send(`
+      <h2>Créditos Pendientes</h2>
+      <a href="/admin">⬅ Volver</a>
+      <ul>
+        ${creditos.map(c => `
+          <li>
+            Venta #${c.venta_id} - Cliente: ${c.cliente || 'Mostrador'}<br/>
+            Monto crédito: ${formatGs(c.monto)} - Pagado: ${formatGs(c.pagado)} - Saldo: ${formatGs(c.saldo)}<br/>
+            ${c.saldo > 0 ? `<form method="POST" action="/admin/creditos/pagar">
+              <input type="hidden" name="cuota_id" value="${c.cuota_id}">
+              <input type="number" step="0.01" name="monto" max="${c.saldo}" placeholder="Monto a pagar" required>
+              <input type="text" name="descripcion" placeholder="Descripción" required>
+              <button>Pagar parcial</button>
+            </form>` : '✅ Crédito cancelado'}
+          </li>
+        `).join("")}
+      </ul>
+    `);
+
+  } catch(err){
+    res.send(`<h2>Error cargando créditos:</h2><pre>${err.message}</pre>`);
+  }
+});
+
+// ====================== REGISTRAR PAGO PARCIAL ======================
+app.post("/admin/creditos/pagar", async (req, res) => {
+  if (!req.session.admin) return res.redirect("/login");
+
+  try {
+    const { cuota_id, monto, descripcion } = req.body;
+    const pagoMonto = Number(monto);
+
+    if(pagoMonto <= 0) return res.send("<script>alert('Monto inválido');window.history.back();</script>");
+
+    // Insertar registro de pago parcial
+    await pool.query(`
+      INSERT INTO pagos_credito(cuota_id, monto, descripcion)
+      VALUES($1,$2,$3)
+    `,[cuota_id,pagoMonto,descripcion]);
+
+    // Registrar ingreso en caja
+    await pool.query(`
+      INSERT INTO caja(tipo,monto,descripcion)
+      VALUES('ingreso',$1,$2)
+    `,[pagoMonto, `Pago parcial cuota ID ${cuota_id}: ${descripcion}`]);
+
+    // Revisar si se canceló totalmente
+    const saldoRes = await pool.query(`
+      SELECT monto - COALESCE(SUM(pago.monto),0) AS saldo
+      FROM cuotas_ventas q
+      LEFT JOIN pagos_credito pago ON pago.cuota_id = q.id
+      WHERE q.id = $1
+      GROUP BY q.monto
+    `,[cuota_id]);
+
+    if(saldoRes.rows[0].saldo <= 0){
+      await pool.query(`UPDATE cuotas_ventas SET pagada = true WHERE id=$1`,[cuota_id]);
+    }
+
+    res.redirect("/admin/creditos");
+
+  } catch(err){
+    res.send(`<h2>Error registrando pago parcial:</h2><pre>${err.message}</pre>`);
+  }
 });
 
 // ====================== START SERVER ======================
