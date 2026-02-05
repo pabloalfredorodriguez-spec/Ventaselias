@@ -359,7 +359,14 @@ app.get("/admin", async (req, res) => {
       <html>
         <body>
           <h2>Dashboard Ventas</h2>
-
+<h3>Menú</h3>
+<ul>
+  <li><a href="/admin/registrar-venta">➕ Registrar Venta</a></li>
+  <li><a href="/admin/ventas">📄 Ventas</a></li>
+  <li><a href="/admin/caja">💰 Caja</a></li>
+  <li><a href="/admin/cuotas">🧾 Cuotas</a></li>
+</ul>
+<hr/>
           <h3>Agregar Cliente</h3>
           <form method="POST" action="/admin/clientes">
             <input name="nombre" placeholder="Nombre" required>
