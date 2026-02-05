@@ -94,17 +94,7 @@ async function initDB() {
   }
 }
 
-// ====================== INICIAR SERVER ======================
-(async function startServer() {
-  await initDB();
-  const server = app.listen(PORT, "0.0.0.0", () =>
-    console.log("Servidor Ventaselias activo en puerto", PORT)
-  );
-  server.keepAliveTimeout = 120000;
-  server.headersTimeout = 120000;
-})();
-
-// ====================== HELPERS ======================
+// ====================== FORMAT HELPERS ======================
 const formatGs = (n) => "Gs. " + Number(n).toLocaleString("es-PY");
 
 // ====================== LOGIN ======================
@@ -486,9 +476,19 @@ app.post("/admin/productos", async (req, res) => {
   }
 });
 
+// ====================== ADMIN DASHBOARD ======================
+// Aquí mantenemos todo tu dashboard, clientes, productos, ventas, caja, cuotas
+// Sin cambios importantes para no perder las mejoras
+
 // ====================== START SERVER ======================
-const server = app.listen(PORT, "0.0.0.0", () =>
-  console.log("Servidor Ventaselias activo en puerto", PORT)
-);
-server.keepAliveTimeout = 120000;
-server.headersTimeout = 120000;
+(async function startServer() {
+  await initDB(); // inicializa la DB antes de arrancar el server
+
+  const server = app.listen(PORT, "0.0.0.0", () =>
+    console.log("Servidor Ventaselias activo en puerto", PORT)
+  );
+
+  // Evitar timeouts prematuros en Render
+  server.keepAliveTimeout = 120000;
+  server.heade
+  })();
