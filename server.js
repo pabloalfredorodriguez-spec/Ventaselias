@@ -103,23 +103,22 @@ await pool.query(`ALTER TABLE productos ADD COLUMN IF NOT EXISTS utilidad NUMERI
         pagada BOOLEAN DEFAULT false
       )
     `);
+        // Pagos parciales
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS pagos_credito (
+        id SERIAL PRIMARY KEY,
+        cuota_id INTEGER REFERENCES cuotas_ventas(id) ON DELETE CASCADE,
+        monto NUMERIC NOT NULL,
+        descripcion TEXT,
+        fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
 
     console.log("DB inicializada correctamente");
   } catch (err) {
     console.error("Error inicializando DB:", err.message);
   }
 }
-// PAGOS PARCIALES
-await pool.query(`
-  CREATE TABLE IF NOT EXISTS pagos_credito (
-    id SERIAL PRIMARY KEY,
-    cuota_id INTEGER REFERENCES cuotas_ventas(id) ON DELETE CASCADE,
-    monto NUMERIC NOT NULL,
-    descripcion TEXT,
-    fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-  );
-`);
-
 
 // ====================== HELPERS ======================
 const formatGs = (n) => "Gs. " + Number(n).toLocaleString("es-PY");
