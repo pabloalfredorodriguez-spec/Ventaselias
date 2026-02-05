@@ -29,10 +29,6 @@ const pool = new Pool({
 });
 
 // ====================== INIT DB ======================
-await pool.query(`
-  ALTER TABLE productos
-  ADD COLUMN IF NOT EXISTS codigo TEXT UNIQUE
-`);
 async function initDB() {
   try {
     await pool.query(`
@@ -49,12 +45,13 @@ async function initDB() {
         id SERIAL PRIMARY KEY,
         nombre TEXT NOT NULL,
         categoria TEXT,
+        codigo TEXT,
         precio_unitario NUMERIC NOT NULL,
         precio_mayorista NUMERIC,
         stock INTEGER DEFAULT 0
       )
     `);
-        await pool.query(`
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS ventas (
         id SERIAL PRIMARY KEY,
         cliente_id INTEGER REFERENCES clientes(id),
@@ -63,7 +60,6 @@ async function initDB() {
         tipo TEXT NOT NULL
       )
     `);
-
     await pool.query(`
       CREATE TABLE IF NOT EXISTS detalle_ventas (
         id SERIAL PRIMARY KEY,
@@ -73,7 +69,6 @@ async function initDB() {
         precio_unitario NUMERIC NOT NULL
       )
     `);
-
     await pool.query(`
       CREATE TABLE IF NOT EXISTS caja (
         id SERIAL PRIMARY KEY,
@@ -83,7 +78,6 @@ async function initDB() {
         descripcion TEXT
       )
     `);
-
     await pool.query(`
       CREATE TABLE IF NOT EXISTS cuotas_ventas (
         id SERIAL PRIMARY KEY,
@@ -99,7 +93,16 @@ async function initDB() {
     console.error("Error inicializando DB:", err.message);
   }
 }
-initDB();
+
+// ====================== INICIAR SERVER ======================
+(async function startServer() {
+  await initDB();
+  const server = app.listen(PORT, "0.0.0.0", () =>
+    console.log("Servidor Ventaselias activo en puerto", PORT)
+  );
+  server.keepAliveTimeout = 120000;
+  server.headersTimeout = 120000;
+})();
 
 // ====================== HELPERS ======================
 const formatGs = (n) => "Gs. " + Number(n).toLocaleString("es-PY");
