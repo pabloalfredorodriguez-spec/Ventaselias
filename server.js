@@ -109,7 +109,7 @@ await pool.query(`ALTER TABLE productos ADD COLUMN IF NOT EXISTS utilidad NUMERI
     console.error("Error inicializando DB:", err.message);
   }
 }
-// ===================== NUEVA TABLA PAGOS PARCIALES =====================
+// PAGOS PARCIALES
 await pool.query(`
   CREATE TABLE IF NOT EXISTS pagos_credito (
     id SERIAL PRIMARY KEY,
