@@ -56,7 +56,10 @@ async function initDB() {
         stock INTEGER DEFAULT 0
       )
     `);
-
+// Asegurar columnas adicionales
+await pool.query(`ALTER TABLE productos ADD COLUMN IF NOT EXISTS codigo TEXT UNIQUE`);
+await pool.query(`ALTER TABLE productos ADD COLUMN IF NOT EXISTS costo NUMERIC`);
+await pool.query(`ALTER TABLE productos ADD COLUMN IF NOT EXISTS utilidad NUMERIC`);
     // Ventas y detalle
     await pool.query(`
       CREATE TABLE IF NOT EXISTS ventas (
