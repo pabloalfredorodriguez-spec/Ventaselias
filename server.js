@@ -142,57 +142,16 @@ app.post("/login", (req, res) => {
   }
 });
 
-// ====================== DASHBOARD ======================
+// ======// ====================== DASHBOARD ======================
 app.get("/admin", async (req, res) => {
   if (!req.session.admin) return res.redirect("/login");
 
-  const clientes = (await pool.query("SELECT * FROM clientes")).rows;
-  const productos = (await pool.query("SELECT * FROM productos")).rows;
+  try {
+    // Traer clientes y productos
+    const clientes = (await pool.query("SELECT * FROM clientes")).rows;
+    const productos = (await pool.query("SELECT * FROM productos")).rows;
 
-  res.send(`
-    <html>
-      <body>
-        <h2>Dashboard Ventas</h2>
-
-        <h3>Menú</h3>
-        <ul>
-          <li><a href="/admin/registrar-venta">➕ Registrar Venta</a></li>
-          <li><a href="/admin/ventas">📄 Ventas</a></li>
-          <li><a href="/admin/caja">💰 Caja</a></li>
-          <li><a href="/admin/cuotas">🧾 Cuotas</a></li>
-        </ul>
-        <hr/>
-
-        <h3>Agregar Cliente</h3>
-        <form method="POST" action="/admin/clientes">
-          <input name="nombre" placeholder="Nombre" required>
-          <input name="tipo" placeholder="Tipo (mostrador/otro)" value="mostrador">
-          <input name="documento" placeholder="Documento">
-          <input name="telefono" placeholder="Teléfono">
-          <button>Agregar Cliente</button>
-        </form>
-
-        <h3>Clientes</h3>
-        <ul>
-          ${clientes.map(c => `<li>${c.nombre} (${c.tipo})</li>`).join("")}
-        </ul>
-
-        <h3>Agregar Producto</h3>
-        <form method="POST" action="/admin/productos">
-          <input name="nombre" placeholder="Nombre" required>
-          <input name="categoria" placeholder="Categoría">
-          <input name="codigo" placeholder="Código">
-          <input name="costo" type="number" step="0.01" placeholder="Costo">
-          <input name="precio_unitario" type="number" step="0.01" placeholder="Precio Unitario" required>
-          <input name="precio_mayorista" type="number" step="0.01" placeholder="Precio Mayorista">
-          <input name="stock" type="number" placeholder="Stock" value="0">
-          <button>Agregar Producto</button>
-        </form>
-
-        <h3>Productos</h3>
-<ul>
-  ${(() => {
-    // Obtener los detalles de ventas agrupados por producto
+    // Traer detalle de ventas agrupado por producto
     const detalleVentas = await pool.query(`
       SELECT producto_id, SUM(cantidad) AS total_vendido, SUM(cantidad * precio_unitario) AS total_ingresos
       FROM detalle_ventas
@@ -204,25 +163,69 @@ app.get("/admin", async (req, res) => {
       detalleMap[d.producto_id] = d;
     });
 
-    // Generar listado de productos con utilidad real
-    return productos.map(p => {
-      const detalle = detalleMap[p.id];
-      const totalVendido = detalle ? Number(detalle.total_vendido) : 0;
-      const totalIngresos = detalle ? Number(detalle.total_ingresos) : 0;
-      const totalCosto = totalVendido * (p.costo || 0);
-      const utilidadReal = totalIngresos - totalCosto;
+    res.send(`
+      <html>
+        <body>
+          <h2>Dashboard Ventas</h2>
 
-      return `<li>
-        <strong>${p.nombre}</strong> - Código: ${p.codigo || '-'} - Stock: ${p.stock} - 
-        Costo unitario: ${formatGs(p.costo || 0)} - Precio venta: ${formatGs(p.precio_unitario)}<br/>
-        Total vendido: ${totalVendido} unidades - Utilidad real: ${formatGs(utilidadReal)}
-      </li>`;
-    }).join("");
-  })()}
-</ul>
-      </body>
-    </html>
-  `);
+          <h3>Menú</h3>
+          <ul>
+            <li><a href="/admin/registrar-venta">➕ Registrar Venta</a></li>
+            <li><a href="/admin/ventas">📄 Ventas</a></li>
+            <li><a href="/admin/caja">💰 Caja</a></li>
+            <li><a href="/admin/cuotas">🧾 Cuotas</a></li>
+          </ul>
+          <hr/>
+
+          <h3>Agregar Cliente</h3>
+          <form method="POST" action="/admin/clientes">
+            <input name="nombre" placeholder="Nombre" required>
+            <input name="tipo" placeholder="Tipo (mostrador/otro)" value="mostrador">
+            <input name="documento" placeholder="Documento">
+            <input name="telefono" placeholder="Teléfono">
+            <button>Agregar Cliente</button>
+          </form>
+
+          <h3>Clientes</h3>
+          <ul>
+            ${clientes.map(c => `<li>${c.nombre} (${c.tipo})</li>`).join("")}
+          </ul>
+
+          <h3>Agregar Producto</h3>
+          <form method="POST" action="/admin/productos">
+            <input name="nombre" placeholder="Nombre" required>
+            <input name="categoria" placeholder="Categoría">
+            <input name="codigo" placeholder="Código">
+            <input name="costo" type="number" step="0.01" placeholder="Costo">
+            <input name="precio_unitario" type="number" step="0.01" placeholder="Precio Unitario" required>
+            <input name="precio_mayorista" type="number" step="0.01" placeholder="Precio Mayorista">
+            <input name="stock" type="number" placeholder="Stock" value="0">
+            <button>Agregar Producto</button>
+          </form>
+
+          <h3>Productos</h3>
+          <ul>
+            ${productos.map(p => {
+              const detalle = detalleMap[p.id];
+              const totalVendido = detalle ? Number(detalle.total_vendido) : 0;
+              const totalIngresos = detalle ? Number(detalle.total_ingresos) : 0;
+              const totalCosto = totalVendido * (p.costo || 0);
+              const utilidadReal = totalIngresos - totalCosto;
+
+              return `<li>
+                <strong>${p.nombre}</strong> - Código: ${p.codigo || '-'} - Stock: ${p.stock} - 
+                Costo unitario: ${formatGs(p.costo || 0)} - Precio venta: ${formatGs(p.precio_unitario)}<br/>
+                Total vendido: ${totalVendido} unidades - Utilidad real: ${formatGs(utilidadReal)}
+              </li>`;
+            }).join("")}
+          </ul>
+        </body>
+      </html>
+    `);
+
+  } catch(err) {
+    res.send(`<h2>Error cargando dashboard:</h2><pre>${err.message}</pre>`);
+  }
 });
 
 // ====================== CLIENTES / PRODUCTOS ======================
