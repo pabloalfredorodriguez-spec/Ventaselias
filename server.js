@@ -190,11 +190,36 @@ app.get("/admin", async (req, res) => {
         </form>
 
         <h3>Productos</h3>
-        <ul>
-          ${productos.map(p =>
-            `<li>${p.nombre} - Código: ${p.codigo || '-'} - Stock: ${p.stock} - Costo: ${formatGs(p.costo || 0)} - Precio: ${formatGs(p.precio_unitario)} - Utilidad: ${formatGs(p.utilidad || 0)}</li>`
-          ).join("")}
-        </ul>
+<ul>
+  ${(() => {
+    // Obtener los detalles de ventas agrupados por producto
+    const detalleVentas = await pool.query(`
+      SELECT producto_id, SUM(cantidad) AS total_vendido, SUM(cantidad * precio_unitario) AS total_ingresos
+      FROM detalle_ventas
+      GROUP BY producto_id
+    `);
+
+    const detalleMap = {};
+    detalleVentas.rows.forEach(d => {
+      detalleMap[d.producto_id] = d;
+    });
+
+    // Generar listado de productos con utilidad real
+    return productos.map(p => {
+      const detalle = detalleMap[p.id];
+      const totalVendido = detalle ? Number(detalle.total_vendido) : 0;
+      const totalIngresos = detalle ? Number(detalle.total_ingresos) : 0;
+      const totalCosto = totalVendido * (p.costo || 0);
+      const utilidadReal = totalIngresos - totalCosto;
+
+      return `<li>
+        <strong>${p.nombre}</strong> - Código: ${p.codigo || '-'} - Stock: ${p.stock} - 
+        Costo unitario: ${formatGs(p.costo || 0)} - Precio venta: ${formatGs(p.precio_unitario)}<br/>
+        Total vendido: ${totalVendido} unidades - Utilidad real: ${formatGs(utilidadReal)}
+      </li>`;
+    }).join("");
+  })()}
+</ul>
       </body>
     </html>
   `);
