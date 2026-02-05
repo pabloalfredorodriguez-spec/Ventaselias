@@ -402,14 +402,6 @@ app.get("/admin", async (req, res) => {
     res.send(`<h2>Error cargando dashboard:</h2><pre>${err.message}</pre>`);
   }
 });
-<h3>Menú</h3>
-<ul>
-  <li><a href="/admin/registrar-venta">➕ Registrar Venta</a></li>
-  <li><a href="/admin/ventas">📄 Ventas</a></li>
-  <li><a href="/admin/caja">💰 Caja</a></li>
-  <li><a href="/admin/cuotas">🧾 Cuotas</a></li>
-</ul>
-<hr/>
 // ====================== ROUTES AGREGAR CLIENTES / PRODUCTOS ======================
 app.post("/admin/clientes", async (req, res) => {
   const { nombre, tipo, documento, telefono } = req.body;
