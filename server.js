@@ -29,6 +29,10 @@ const pool = new Pool({
 });
 
 // ====================== INIT DB ======================
+await pool.query(`
+  ALTER TABLE productos
+  ADD COLUMN IF NOT EXISTS codigo TEXT UNIQUE
+`);
 async function initDB() {
   try {
     await pool.query(`
@@ -309,7 +313,7 @@ app.get("/admin/caja", async (req, res) => {
     <p>Ingresos: ${formatGs(ingresos)}</p>
     <p>Egresos: ${formatGs(egresos)}</p>
     <p><strong>Saldo: ${formatGs(ingresos - egresos)}</strong></p>
-
+<a href="/admin/caja/nuevo" style="padding:10px 15px;background:green;color:white;border-radius:5px;">➕ Nuevo Movimiento</a>
     <h3>Movimientos</h3>
     <ul>
       ${movimientos.map(m => `
@@ -319,6 +323,39 @@ app.get("/admin/caja", async (req, res) => {
 
     <a href="/admin">⬅ Volver</a>
   `);
+});
+// Formulario para nuevo movimiento
+app.get("/admin/caja/nuevo", (req,res) => {
+  if(!req.session.admin) return res.redirect("/login");
+  res.send(`
+    <h2>Agregar Movimiento Caja</h2>
+    <form method="POST" action="/admin/caja/nuevo">
+      <label>Monto:</label><input name="monto" type="number" step="0.01" required><br/>
+      <label>Tipo:</label>
+      <select name="tipo">
+        <option value="ingreso">Ingreso</option>
+        <option value="egreso">Egreso</option>
+      </select><br/>
+      <label>Concepto:</label><input name="descripcion" required><br/>
+      <button style="padding:10px 15px;background:green;color:white;border:none;border-radius:5px;">Guardar</button>
+    </form>
+    <a href="/admin/caja">⬅ Volver</a>
+  `);
+});
+
+// Registrar movimiento
+app.post("/admin/caja/nuevo", async (req,res) => {
+  if(!req.session.admin) return res.redirect("/login");
+  const { monto, tipo, descripcion } = req.body;
+  try {
+    await pool.query(
+      "INSERT INTO caja(tipo,monto,descripcion) VALUES($1,$2,$3)",
+      [tipo, Number(monto), descripcion]
+    );
+    res.redirect("/admin/caja");
+  } catch(err){
+    res.send(`<h2>Error registrando movimiento:</h2><pre>${err.message}</pre>`);
+  }
 });
 app.get("/admin/cuotas", async (req, res) => {
   if (!req.session.admin) return res.redirect("/login");
@@ -424,12 +461,22 @@ app.post("/admin/clientes", async (req, res) => {
 });
 
 app.post("/admin/productos", async (req, res) => {
-  const { nombre, categoria, precio_unitario, precio_mayorista, stock } = req.body;
+  const { nombre, categoria, codigo, precio_unitario, precio_mayorista, stock } = req.body;
   try {
-    await pool.query(
-      "INSERT INTO productos (nombre, categoria, precio_unitario, precio_mayorista, stock) VALUES ($1,$2,$3,$4,$5)",
-      [nombre, categoria, precio_unitario, precio_mayorista || null, stock || 0]
-    );
+    const existing = await pool.query("SELECT * FROM productos WHERE codigo = $1", [codigo]);
+    if(existing.rows.length > 0){
+      // Si existe, solo aumenta stock
+      await pool.query(
+        "UPDATE productos SET stock = stock + $1, nombre=$2, categoria=$3, precio_unitario=$4, precio_mayorista=$5 WHERE codigo=$6",
+        [Number(stock), nombre, categoria, precio_unitario, precio_mayorista || null, codigo]
+      );
+    } else {
+      // Si no existe, crea producto
+      await pool.query(
+        "INSERT INTO productos(nombre, categoria, codigo, precio_unitario, precio_mayorista, stock) VALUES ($1,$2,$3,$4,$5,$6)",
+        [nombre, categoria, codigo, precio_unitario, precio_mayorista || null, Number(stock) || 0]
+      );
+    }
     res.redirect("/admin");
   } catch (err) {
     res.send(`<h2>Error agregando producto:</h2><pre>${err.message}</pre>`);
