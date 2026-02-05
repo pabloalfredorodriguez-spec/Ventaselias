@@ -288,10 +288,36 @@ app.get("/admin/registrar-venta", async (req, res) => {
           </select><br/><br/>
           
           <h3>Productos</h3>
-          ${productos.map(p => `
-            <label>${p.nombre} (Stock: ${p.stock}) - Precio: <span class="precio" data-precio-unitario="${p.precio_unitario}" data-precio-mayorista="${p.precio_mayorista || ''}">${formatGs(p.precio_unitario)}</span></label>
-            <input type="number" name="producto_${p.id}" value="0" min="0" max="${p.stock}"><br/>
-          `).join('')}
+${productos.map(p => `
+  <label>
+    ${p.nombre} (Stock: ${p.stock}) - 
+    Precio Normal: <span class="precio-normal">${formatGs(p.precio_unitario)}</span> 
+    ${p.precio_mayorista ? `- Precio Mayorista: <span class="precio-mayorista">${formatGs(p.precio_mayorista)}</span>` : ''}
+  </label>
+  <input type="number" name="producto_${p.id}" value="0" min="0" max="${p.stock}"><br/>
+`).join('')}
+
+<script>
+function actualizarPrecios(){
+  const clienteSelect = document.getElementById('clienteSelect');
+  const tipoCliente = clienteSelect.selectedOptions[0].dataset.tipo;
+  document.querySelectorAll('[name^="producto_"]').forEach(input => {
+    const label = input.previousElementSibling;
+    const precioNormal = label.querySelector('.precio-normal');
+    const precioMayorista = label.querySelector('.precio-mayorista');
+
+    if(tipoCliente === 'mayorista' && precioMayorista){
+      label.style.fontWeight = 'bold'; // resaltar el precio que se aplicará
+      precioNormal.style.textDecoration = 'line-through';
+    } else {
+      label.style.fontWeight = 'normal';
+      if(precioMayorista) precioNormal.style.textDecoration = 'none';
+    }
+  });
+}
+actualizarPrecios();
+document.getElementById('clienteSelect').addEventListener('change', actualizarPrecios);
+</script>
           <br/>
           <button>Registrar Venta</button>
         </form>
