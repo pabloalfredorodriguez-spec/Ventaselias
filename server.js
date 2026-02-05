@@ -190,6 +190,124 @@ app.post("/admin/registrar-venta", async (req, res) => {
     res.send(`<h2>Error registrando venta:</h2><pre>${err.message}</pre>`);
   }
 });
+app.get("/admin/ventas", async (req, res) => {
+  if (!req.session.admin) return res.redirect("/login");
+
+  const ventas = (await pool.query(`
+    SELECT v.*, c.nombre AS cliente
+    FROM ventas v
+    LEFT JOIN clientes c ON c.id = v.cliente_id
+    ORDER BY v.id DESC
+  `)).rows;
+
+  res.send(`
+    <h2>Ventas</h2>
+    <a href="/admin">⬅ Volver</a>
+    <ul>
+      ${ventas.map(v => `
+        <li>
+          Venta #${v.id} - ${v.cliente || "Mostrador"} -
+          ${formatGs(v.total)} - ${v.tipo}
+          <a href="/admin/ventas/${v.id}">🔍 Ver</a>
+        </li>
+      `).join("")}
+    </ul>
+  `);
+});
+app.get("/admin/ventas/:id", async (req, res) => {
+  if (!req.session.admin) return res.redirect("/login");
+
+  const { id } = req.params;
+
+  const venta = (await pool.query(`
+    SELECT v.*, c.nombre AS cliente
+    FROM ventas v
+    LEFT JOIN clientes c ON c.id = v.cliente_id
+    WHERE v.id = $1
+  `, [id])).rows[0];
+
+  const detalle = (await pool.query(`
+    SELECT d.*, p.nombre
+    FROM detalle_ventas d
+    JOIN productos p ON p.id = d.producto_id
+    WHERE d.venta_id = $1
+  `, [id])).rows;
+
+  res.send(`
+    <h2>Detalle Venta #${venta.id}</h2>
+    <p>Cliente: ${venta.cliente || "Mostrador"}</p>
+    <p>Total: ${formatGs(venta.total)}</p>
+    <p>Tipo: ${venta.tipo}</p>
+
+    <h3>Productos</h3>
+    <ul>
+      ${detalle.map(d => `
+        <li>${d.nombre} - ${d.cantidad} x ${formatGs(d.precio_unitario)}</li>
+      `).join("")}
+    </ul>
+
+    <a href="/admin/ventas">⬅ Volver</a>
+  `);
+});
+app.get("/admin/caja", async (req, res) => {
+  if (!req.session.admin) return res.redirect("/login");
+
+  const movimientos = (await pool.query(
+    "SELECT * FROM caja ORDER BY id DESC"
+  )).rows;
+
+  const ingresos = movimientos
+    .filter(m => m.tipo === "ingreso")
+    .reduce((s, m) => s + Number(m.monto), 0);
+
+  const egresos = movimientos
+    .filter(m => m.tipo === "egreso")
+    .reduce((s, m) => s + Number(m.monto), 0);
+
+  res.send(`
+    <h2>Caja</h2>
+    <p>Ingresos: ${formatGs(ingresos)}</p>
+    <p>Egresos: ${formatGs(egresos)}</p>
+    <p><strong>Saldo: ${formatGs(ingresos - egresos)}</strong></p>
+
+    <h3>Movimientos</h3>
+    <ul>
+      ${movimientos.map(m => `
+        <li>${m.fecha} - ${m.tipo} - ${formatGs(m.monto)} (${m.descripcion})</li>
+      `).join("")}
+    </ul>
+
+    <a href="/admin">⬅ Volver</a>
+  `);
+});
+app.get("/admin/cuotas", async (req, res) => {
+  if (!req.session.admin) return res.redirect("/login");
+
+  const cuotas = (await pool.query(`
+    SELECT q.*, v.cliente_id, c.nombre
+    FROM cuotas_ventas q
+    JOIN ventas v ON v.id = q.venta_id
+    LEFT JOIN clientes c ON c.id = v.cliente_id
+    ORDER BY q.fecha_vencimiento
+  `)).rows;
+
+  res.send(`
+    <h2>Cuotas</h2>
+    <ul>
+      ${cuotas.map(q => `
+        <li>
+          Venta #${q.venta_id} - ${q.nombre || "Mostrador"} -
+          Cuota ${q.numero} -
+          ${formatGs(q.monto)} -
+          Vence: ${q.fecha_vencimiento} -
+          ${q.pagada ? "✅ Pagada" : "❌ Pendiente"}
+        </li>
+      `).join("")}
+    </ul>
+
+    <a href="/admin">⬅ Volver</a>
+  `);
+});
 app.get("/admin", async (req, res) => {
   if (!req.session.admin) return res.redirect("/login");
 
@@ -244,7 +362,14 @@ app.get("/admin", async (req, res) => {
     res.send(`<h2>Error cargando dashboard:</h2><pre>${err.message}</pre>`);
   }
 });
-
+<h3>Menú</h3>
+<ul>
+  <li><a href="/admin/registrar-venta">➕ Registrar Venta</a></li>
+  <li><a href="/admin/ventas">📄 Ventas</a></li>
+  <li><a href="/admin/caja">💰 Caja</a></li>
+  <li><a href="/admin/cuotas">🧾 Cuotas</a></li>
+</ul>
+<hr/>
 // ====================== ROUTES AGREGAR CLIENTES / PRODUCTOS ======================
 app.post("/admin/clientes", async (req, res) => {
   const { nombre, tipo, documento, telefono } = req.body;
