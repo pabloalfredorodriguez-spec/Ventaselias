@@ -608,12 +608,12 @@ app.post("/admin/creditos/pagar", async (req, res) => {
 
     // Revisar si se canceló totalmente
     const saldoRes = await pool.query(`
-      SELECT monto - COALESCE(SUM(pago.monto),0) AS saldo
-      FROM cuotas_ventas q
-      LEFT JOIN pagos_credito pago ON pago.cuota_id = q.id
-      WHERE q.id = $1
-      GROUP BY q.monto
-    `,[cuota_id]);
+  SELECT q.monto - COALESCE(SUM(pago.monto),0) AS saldo
+  FROM cuotas_ventas q
+  LEFT JOIN pagos_credito pago ON pago.cuota_id = q.id
+  WHERE q.id = $1
+  GROUP BY q.monto
+`, [cuota_id]);
 
     if(saldoRes.rows[0].saldo <= 0){
       await pool.query(`UPDATE cuotas_ventas SET pagada = true WHERE id=$1`,[cuota_id]);
