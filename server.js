@@ -153,9 +153,118 @@ app.post("/login", (req, res) => {
 });
 
 // ======// ====================== DASHBOARD ======================
-app.get("/admin", async (req, res) => {
+app.get("/admin", (req, res) => {
+  if (!req.session.admin) return res.redirect("/login");
+  res.redirect("/admin/dashboard");
+});
+app.get("/admin/dashboard", async (req, res) => {
   if (!req.session.admin) return res.redirect("/login");
 
+  try {
+    // ================= DATOS =================
+    const carteraRes = await pool.query(`
+      SELECT SUM(monto - COALESCE(pagado,0)) AS total
+      FROM (
+        SELECT q.monto, COALESCE(SUM(p.monto),0) AS pagado
+        FROM cuotas_ventas q
+        LEFT JOIN pagos_credito p ON p.cuota_id = q.id
+        GROUP BY q.id
+      ) t
+    `);
+
+    const cartera = Number(carteraRes.rows[0].total || 0);
+
+    const vencidaRes = await pool.query(`
+      SELECT COUNT(*) AS vencidas
+      FROM cuotas_ventas
+      WHERE pagada = false AND fecha_vencimiento < CURRENT_DATE
+    `);
+
+    const cuotasVencidas = Number(vencidaRes.rows[0].vencidas);
+
+    const cajaRes = await pool.query(`
+      SELECT 
+        SUM(CASE WHEN tipo='ingreso' THEN monto ELSE 0 END) -
+        SUM(CASE WHEN tipo='egreso' THEN monto ELSE 0 END) AS saldo
+      FROM caja
+    `);
+
+    const caja = Number(cajaRes.rows[0].saldo || 0);
+
+    const capitalRes = await pool.query(`SELECT SUM(total) AS total FROM ventas WHERE tipo='credito'`);
+    const capitalPrestado = Number(capitalRes.rows[0].total || 0);
+
+    const cobradoRes = await pool.query(`SELECT SUM(monto) AS total FROM pagos_credito`);
+    const totalCobrado = Number(cobradoRes.rows[0].total || 0);
+
+    const proximaRes = await pool.query(`
+      SELECT fecha_vencimiento
+      FROM cuotas_ventas
+      WHERE pagada = false
+      ORDER BY fecha_vencimiento ASC
+      LIMIT 1
+    `);
+
+    const proximaCuota = proximaRes.rows[0]?.fecha_vencimiento || '-';
+
+    // ================= HTML =================
+    res.send(`
+      <style>
+        body{font-family:system-ui;background:#f2f4f7;margin:0}
+        .container{max-width:420px;margin:auto;padding:15px}
+        h2{margin:20px 0 10px}
+        .card{border-radius:12px;padding:20px;margin-bottom:15px;
+              color:#fff;text-align:center;
+              box-shadow:0 4px 8px rgba(0,0,0,.08)}
+        .title{font-size:15px;opacity:.9}
+        .value{font-size:22px;font-weight:bold;margin-top:5px}
+        .blue{background:#2196f3}
+        .green{background:#4caf50}
+        .red{background:#f44336}
+        .yellow{background:#ffc107;color:#000}
+        .purple{background:#9c27b0}
+      </style>
+
+      <div class="container">
+        <h2>💼 Estado de cartera</h2>
+
+        <div class="card blue">
+          <div class="title">Cartera a cobrar</div>
+          <div class="value">${formatGs(cartera)}</div>
+        </div>
+
+        <div class="card red">
+          <div class="title">Cuotas vencidas</div>
+          <div class="value">${cuotasVencidas}</div>
+        </div>
+
+        <h2>📊 Dashboard</h2>
+
+        <div class="card green">
+          <div class="title">Caja actual</div>
+          <div class="value">${formatGs(caja)}</div>
+        </div>
+
+        <div class="card blue">
+          <div class="title">Capital prestado</div>
+          <div class="value">${formatGs(capitalPrestado)}</div>
+        </div>
+
+        <div class="card yellow">
+          <div class="title">Total cobrado</div>
+          <div class="value">${formatGs(totalCobrado)}</div>
+        </div>
+
+        <div class="card purple">
+          <div class="title">Próxima cuota</div>
+          <div class="value">${proximaCuota}</div>
+        </div>
+      </div>
+    `);
+  } catch (err) {
+    res.send(`<pre>${err.message}</pre>`);
+  }
+});
   try {
     // Traer clientes y productos
     const clientes = (await pool.query("SELECT * FROM clientes")).rows;
