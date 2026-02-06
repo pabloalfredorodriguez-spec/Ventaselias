@@ -471,7 +471,6 @@ app.post("/admin/productos", async (req,res)=>{
   } catch(err){ res.send(`<pre>Error: ${err.message}</pre>`);}
 });
 
-// ====================== ELIMINAR CLIENTE ======================
 app.post("/admin/clientes/eliminar", async (req,res)=>{
   const { id } = req.body;
   try {
@@ -487,7 +486,6 @@ app.post("/admin/productos", async (req, res) => {
   ...
 });
 
-// ====================== ELIMINAR PRODUCTO ======================
 app.post("/admin/productos/eliminar", async (req,res)=>{
   const { id } = req.body;
   try {
