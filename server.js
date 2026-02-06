@@ -32,6 +32,7 @@ const pool = new Pool({
 // ====================== INIT DB ======================
 async function initDB() {
   try {
+    // Clientes
     await pool.query(`
       CREATE TABLE IF NOT EXISTS clientes (
         id SERIAL PRIMARY KEY,
@@ -41,6 +42,8 @@ async function initDB() {
         telefono TEXT
       )
     `);
+
+    // Productos
     await pool.query(`
       CREATE TABLE IF NOT EXISTS productos (
         id SERIAL PRIMARY KEY,
@@ -49,10 +52,17 @@ async function initDB() {
         codigo TEXT,
         precio_unitario NUMERIC NOT NULL,
         precio_mayorista NUMERIC,
-        costo_unitario NUMERIC DEFAULT 0,
         stock INTEGER DEFAULT 0
       )
     `);
+
+    // Asegurar costo_unitario
+    await pool.query(`
+      ALTER TABLE productos
+      ADD COLUMN IF NOT EXISTS costo_unitario NUMERIC DEFAULT 0
+    `);
+
+    // Ventas
     await pool.query(`
       CREATE TABLE IF NOT EXISTS ventas (
         id SERIAL PRIMARY KEY,
@@ -62,6 +72,8 @@ async function initDB() {
         tipo TEXT NOT NULL
       )
     `);
+
+    // Detalle de ventas
     await pool.query(`
       CREATE TABLE IF NOT EXISTS detalle_ventas (
         id SERIAL PRIMARY KEY,
@@ -71,6 +83,8 @@ async function initDB() {
         precio_unitario NUMERIC NOT NULL
       )
     `);
+
+    // Caja
     await pool.query(`
       CREATE TABLE IF NOT EXISTS caja (
         id SERIAL PRIMARY KEY,
@@ -80,6 +94,8 @@ async function initDB() {
         descripcion TEXT
       )
     `);
+
+    // Cuotas / créditos
     await pool.query(`
       CREATE TABLE IF NOT EXISTS cuotas_ventas (
         id SERIAL PRIMARY KEY,
@@ -90,7 +106,8 @@ async function initDB() {
         pagada BOOLEAN DEFAULT false
       )
     `);
-    console.log("DB inicializada correctamente");
+
+    console.log("DB inicializada correctamente ✅");
   } catch (err) {
     console.error("Error inicializando DB:", err.message);
   }
@@ -191,9 +208,9 @@ app.get("/admin", async (req,res)=>{
 
         <h3>Agregar Producto</h3>
         <form method="POST" action="/admin/productos">
+          <input name="codigo" placeholder="Código" required>
           <input name="nombre" placeholder="Nombre" required>
           <input name="categoria" placeholder="Categoría">
-          <input name="codigo" placeholder="Código">
           <input name="precio_unitario" type="number" step="0.01" placeholder="Precio Unitario" required>
           <input name="precio_mayorista" type="number" step="0.01" placeholder="Precio Mayorista">
           <input name="costo_unitario" type="number" step="0.01" placeholder="Costo Unitario">
@@ -205,13 +222,10 @@ app.get("/admin", async (req,res)=>{
 <ul>
   ${productos.map(p => `
     <li>
-      ${p.nombre} - Stock: ${p.stock} - Precio: ${formatGs(p.precio_unitario)}
-      <form method="POST" action="/admin/productos/eliminar" style="display:inline">
-        <input type="hidden" name="id" value="${p.id}">
-        <button type="submit" style="background:red;color:white;border:none;border-radius:3px;padding:3px 6px;">Eliminar</button>
-      </form>
-    </li>
-  `).join("")}
+      ${p.codigo || '---'} - ${p.nombre} - Stock: ${p.stock} - Precio: ${formatGs(p.precio_unitario)}
+      ${p.precio_mayorista ? ' - Mayorista: ' + formatGs(p.precio_mayorista) : ''}
+      - Costo: ${formatGs(p.costo_unitario)} - Utilidad: ${formatGs(p.precio_unitario - p.costo_unitario)}
+    </li>`).join("")}
 </ul>
       </body>
     </html>
