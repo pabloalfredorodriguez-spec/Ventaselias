@@ -237,7 +237,7 @@ document.getElementById("codigo").addEventListener("blur", async function () {
   const codigo = this.value.trim();
   if (!codigo) return;
 
-  const res = await fetch(`/admin/productos/buscar/${codigo}`);
+  const res = await fetch("/admin/productos/buscar/" + codigo);
   const producto = await res.json();
 
   if (producto) {
