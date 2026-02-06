@@ -504,6 +504,18 @@ app.post("/admin/productos/eliminar", async (req,res)=>{
     res.send(`<pre>Error al eliminar producto: ${err.message}</pre>`);
   }
 });
+// ====================== BORRAR TODAS LAS VENTAS ======================
+app.post("/admin/reset-ventas", async (req,res)=>{
+  try{
+    await pool.query("TRUNCATE TABLE detalle_ventas RESTART IDENTITY CASCADE");
+    await pool.query("TRUNCATE TABLE cuotas_ventas RESTART IDENTITY CASCADE");
+    await pool.query("TRUNCATE TABLE ventas RESTART IDENTITY CASCADE");
+    await pool.query("TRUNCATE TABLE caja RESTART IDENTITY CASCADE"); // opcional
+    res.send("✅ Todas las ventas y movimientos de caja borrados");
+  }catch(err){
+    res.send(`<pre>Error: ${err.message}</pre>`);
+  }
+});
 
 // ====================== START SERVER ======================
 (async function startServer() {
