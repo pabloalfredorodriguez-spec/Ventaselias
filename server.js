@@ -471,6 +471,32 @@ app.post("/admin/productos", async (req,res)=>{
   } catch(err){ res.send(`<pre>Error: ${err.message}</pre>`);}
 });
 
+// ====================== ELIMINAR CLIENTE ======================
+app.post("/admin/clientes/eliminar", async (req,res)=>{
+  const { id } = req.body;
+  try {
+    await pool.query("DELETE FROM clientes WHERE id=$1", [id]);
+    res.redirect("/admin");
+  } catch(err) {
+    res.send(`<pre>Error al eliminar cliente: ${err.message}</pre>`);
+  }
+});
+
+// Agregar producto
+app.post("/admin/productos", async (req, res) => {
+  ...
+});
+
+// ====================== ELIMINAR PRODUCTO ======================
+app.post("/admin/productos/eliminar", async (req,res)=>{
+  const { id } = req.body;
+  try {
+    await pool.query("DELETE FROM productos WHERE id=$1", [id]);
+    res.redirect("/admin");
+  } catch(err) {
+    res.send(`<pre>Error al eliminar producto: ${err.message}</pre>`);
+  }
+});
 // ====================== START SERVER ======================
 (async function startServer() {
   await initDB();
