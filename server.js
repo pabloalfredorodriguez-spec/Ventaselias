@@ -502,9 +502,15 @@ app.post("/admin/productos/eliminar", async (req,res)=>{
 });
 
 app.post("/admin/ventas/eliminar", async (req, res) => {
-  const { id } = req.body; // id de la venta
+  const { id } = req.body;
   try {
+    // Borrar primero detalles
+    await pool.query("DELETE FROM detalle_ventas WHERE venta_id=$1", [id]);
+    await pool.query("DELETE FROM cuotas_ventas WHERE venta_id=$1", [id]);
+
+    // Ahora sí borrar la venta
     await pool.query("DELETE FROM ventas WHERE id=$1", [id]);
+
     res.redirect("/admin/ventas");
   } catch (err) {
     res.send(`<pre>Error al eliminar venta: ${err.message}</pre>`);
