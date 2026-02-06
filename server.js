@@ -206,17 +206,46 @@ app.get("/admin", async (req,res)=>{
   `).join("")}
 </ul>
 
-        <h3>Agregar Producto</h3>
-        <form method="POST" action="/admin/productos">
-          <input name="codigo" placeholder="Código" required>
-          <input name="nombre" placeholder="Nombre" required>
-          <input name="categoria" placeholder="Categoría">
-          <input name="precio_unitario" type="number" step="0.01" placeholder="Precio Unitario" required>
-          <input name="precio_mayorista" type="number" step="0.01" placeholder="Precio Mayorista">
-          <input name="costo_unitario" type="number" step="0.01" placeholder="Costo Unitario">
-          <input name="stock" type="number" placeholder="Stock" value="0">
-          <button class="btn-primary">Agregar Producto</button>
-        </form>
+        <h3>Agregar / Actualizar Producto</h3>
+
+<form method="POST" action="/admin/productos">
+  Código:
+  <input type="text" name="codigo" id="codigo" required><br>
+
+  Nombre:
+  <input type="text" name="nombre" id="nombre" required><br>
+
+  Categoría:
+  <input type="text" name="categoria" id="categoria"><br>
+
+  Precio unitario:
+  <input type="number" name="precio_unitario" step="0.01" required><br>
+
+  Precio mayorista:
+  <input type="number" name="precio_mayorista" step="0.01"><br>
+
+  Costo unitario:
+  <input type="number" name="costo_unitario" step="0.01"><br>
+
+  Cantidad (stock a sumar):
+  <input type="number" name="stock" value="0"><br>
+
+  <button>Guardar</button>
+</form>
+<script>
+document.getElementById("codigo").addEventListener("blur", async function () {
+  const codigo = this.value.trim();
+  if (!codigo) return;
+
+  const res = await fetch(`/admin/productos/buscar/${codigo}`);
+  const producto = await res.json();
+
+  if (producto) {
+    document.getElementById("nombre").value = producto.nombre;
+    document.getElementById("categoria").value = producto.categoria || "";
+  }
+});
+</script>
 
         <h3>Productos</h3>
 <ul>
