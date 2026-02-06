@@ -232,6 +232,25 @@ app.get("/admin", async (req,res)=>{
   `);
 });
 
+// ====================== BUSCAR PRODUCTO POR CÓDIGO ======================
+app.get("/admin/productos/buscar/:codigo", async (req, res) => {
+  try {
+    const { codigo } = req.params;
+    const result = await pool.query(
+      "SELECT * FROM productos WHERE codigo = $1",
+      [codigo]
+    );
+
+    if (result.rows.length === 0) {
+      return res.json(null);
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ====================== REGISTRAR VENTA ======================
 app.get("/admin/registrar-venta", async (req,res)=>{
   if(!req.session.admin) return res.redirect("/login");
