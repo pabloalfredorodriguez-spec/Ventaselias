@@ -307,29 +307,33 @@ app.post("/admin/registrar-venta", async (req,res)=>{
 });
 
 // ====================== LISTADO VENTAS ======================
-app.get("/admin/ventas", async (req,res)=>{
-  if(!req.session.admin) return res.redirect("/login");
+app.get("/admin/ventas", async (req, res) => {
+  if (!req.session.admin) return res.redirect("/login");
+
   const ventas = (await pool.query(`
-    SELECT v.id, v.fecha, v.total, v.tipo, c.nombre as cliente
+    SELECT v.id, v.fecha, v.total, v.tipo, c.nombre AS cliente
     FROM ventas v
-    LEFT JOIN clientes c ON c.id = v.cliente_id
+    LEFT JOIN clientes c ON v.cliente_id = c.id
     ORDER BY v.fecha DESC
   `)).rows;
 
   res.send(`
-    <h2>Ventas</h2>
-    <a href="/admin">⬅ Volver al dashboard</a>
-    <ul>
+    <h2>Ventas realizadas</h2>
+    <table border="1" cellpadding="5" cellspacing="0">
+      <tr>
+        <th>ID</th><th>Fecha</th><th>Cliente</th><th>Total</th><th>Tipo</th>
+      </tr>
       ${ventas.map(v => `
-        <li>
-          ${new Date(v.fecha).toLocaleString()} - ${v.cliente || "Cliente desconocido"} - ${v.tipo} - ${v.total}
-          <form method="POST" action="/admin/ventas/eliminar" style="display:inline">
-            <input type="hidden" name="id" value="${v.id}">
-            <button type="submit" style="background:red;color:white;border:none;border-radius:3px;padding:3px 6px;">Eliminar</button>
-          </form>
-        </li>
+        <tr>
+          <td>${v.id}</td>
+          <td>${new Date(v.fecha).toLocaleString()}</td>
+          <td>${v.cliente || 'Mostrador'}</td>
+          <td>${formatGs(v.total)}</td>
+          <td>${v.tipo}</td>
+        </tr>
       `).join("")}
-    </ul>
+    </table>
+    <a href="/admin">⬅ Volver al dashboard</a>
   `);
 });
 
@@ -498,22 +502,6 @@ app.post("/admin/productos/eliminar", async (req,res)=>{
     res.redirect("/admin");
   } catch(err) {
     res.send(`<pre>Error al eliminar producto: ${err.message}</pre>`);
-  }
-});
-
-app.post("/admin/ventas/eliminar", async (req, res) => {
-  const { id } = req.body;
-  try {
-    // Borrar primero detalles
-    await pool.query("DELETE FROM detalle_ventas WHERE venta_id=$1", [id]);
-    await pool.query("DELETE FROM cuotas_ventas WHERE venta_id=$1", [id]);
-
-    // Ahora sí borrar la venta
-    await pool.query("DELETE FROM ventas WHERE id=$1", [id]);
-
-    res.redirect("/admin/ventas");
-  } catch (err) {
-    res.send(`<pre>Error al eliminar venta: ${err.message}</pre>`);
   }
 });
 
