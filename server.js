@@ -14,8 +14,8 @@ app.use(
   session({
     secret: "ventas-secret",
     resave: false,
-    saveUninitialized: false,
-    cookie: { secure: process.env.NODE_ENV === "production" },
+    saveUninitialized: true, // necesario para que la sesión se cree
+    cookie: { secure: false }, // funciona en localhost sin HTTPS
   })
 );
 
@@ -129,7 +129,7 @@ app.get("/login", (req, res) => {
 app.post("/login", (req, res) => {
   const { user, pass } = req.body;
   if (user === ADMIN_USER && pass === ADMIN_PASS) {
-    req.session.admin = true;
+    req.session.admin = true; // sesión se guarda correctamente
     res.redirect("/admin");
   } else {
     res.send("<script>alert('Credenciales incorrectas');window.location='/login';</script>");
@@ -228,160 +228,6 @@ app.post("/admin/productos", async (req,res)=>{
     }
     res.redirect("/admin");
   } catch(err){ res.send(`<pre>Error: ${err.message}</pre>`);}
-});
-
-// ====================== REGISTRAR VENTA ======================
-app.get("/admin/registrar-venta", async (req,res)=>{
-  if(!req.session.admin) return res.redirect("/login");
-  const clientes = (await pool.query("SELECT * FROM clientes")).rows;
-  const productos = (await pool.query("SELECT * FROM productos")).rows;
-
-  res.send(`
-    <h2>Registrar Venta</h2>
-    <form method="POST" action="/admin/registrar-venta">
-      Cliente:
-      <select name="cliente_id" required>
-        ${clientes.map(c=>`<option value="${c.id}">${c.nombre} (${c.tipo})</option>`).join("")}
-      </select>
-      <br/>
-      Tipo de venta:
-      <select name="tipo">
-        <option value="contado">Contado</option>
-        <option value="credito">Crédito</option>
-      </select>
-      <h3>Productos</h3>
-      ${productos.map(p => `
-        <div>
-          <input type="checkbox" name="productos[]" value="${p.id}">${p.nombre} - Stock: ${p.stock}
-          <input type="number" name="cant_${p.id}" placeholder="Cantidad" min="1" style="width:60px;">
-          <select name="precio_${p.id}">
-            <option value="${p.precio_unitario}">Minorista: ${formatGs(p.precio_unitario)}</option>
-            ${p.precio_mayorista ? `<option value="${p.precio_mayorista}">Mayorista: ${formatGs(p.precio_mayorista)}</option>` : ''}
-          </select>
-        </div>`).join("")}
-      <button>Registrar Venta</button>
-    </form>
-    <a href="/admin">⬅ Volver al dashboard</a>
-  `);
-});
-
-app.post("/admin/registrar-venta", async (req,res)=>{
-  const { cliente_id, tipo, productos: prodIds } = req.body;
-  if(!prodIds) return res.send("Seleccione al menos un producto");
-  const ids = Array.isArray(prodIds)?prodIds:[prodIds];
-  let total=0, detalles=[];
-  for(const pid of ids){
-    const cant=Number(req.body[`cant_${pid}`]);
-    const precio=Number(req.body[`precio_${pid}`]);
-    total+=cant*precio;
-    detalles.push({pid,cant,precio});
-  }
-
-  try{
-    const ventaRes = await pool.query("INSERT INTO ventas(cliente_id,total,tipo) VALUES($1,$2,$3) RETURNING id", [cliente_id,total,tipo]);
-    const venta_id = ventaRes.rows[0].id;
-
-    for(const d of detalles){
-      await pool.query("INSERT INTO detalle_ventas(venta_id,producto_id,cantidad,precio_unitario) VALUES($1,$2,$3,$4)",
-        [venta_id,d.pid,d.cant,d.precio]);
-      await pool.query("UPDATE productos SET stock=stock-$1 WHERE id=$2",[d.cant,d.pid]);
-    }
-
-    if(tipo==="contado"){
-      await pool.query("INSERT INTO caja(tipo,monto,descripcion) VALUES('ingreso',$1,$2)",[total,`Venta contado ID ${venta_id}`]);
-    } else{
-      await pool.query("INSERT INTO cuotas_ventas(venta_id,numero,monto,fecha_vencimiento) VALUES($1,1,$2,NOW()::date + INTERVAL '22 day')",[venta_id,total]);
-    }
-    res.redirect("/admin/ventas");
-  } catch(err){ res.send(`<pre>Error: ${err.message}</pre>`);}
-});
-
-// ====================== LISTADO VENTAS ======================
-app.get("/admin/ventas", async (req,res)=>{
-  if(!req.session.admin) return res.redirect("/login");
-  const ventas = (await pool.query(`
-    SELECT v.id, v.fecha, v.total, v.tipo, c.nombre as cliente
-    FROM ventas v
-    LEFT JOIN clientes c ON c.id=v.cliente_id
-    ORDER BY v.fecha DESC
-  `)).rows;
-
-  res.send(`
-    <h2>Ventas</h2>
-    <table border="1" cellpadding="5">
-      <tr><th>Fecha</th><th>Cliente</th><th>Total</th><th>Tipo</th></tr>
-      ${ventas.map(v=>`<tr><td>${new Date(v.fecha).toLocaleString()}</td><td>${v.cliente}</td><td>${formatGs(v.total)}</td><td>${v.tipo}</td></tr>`).join("")}
-    </table>
-    <a href="/admin">⬅ Volver al dashboard</a>
-  `);
-});
-
-// ====================== CAJA ======================
-app.get("/admin/caja", async (req,res)=>{
-  if(!req.session.admin) return res.redirect("/login");
-  const caja = (await pool.query("SELECT * FROM caja ORDER BY fecha DESC")).rows;
-  const saldoRes = (await pool.query("SELECT SUM(CASE WHEN tipo='ingreso' THEN monto ELSE -monto END) as saldo FROM caja")).rows[0];
-  const saldo = saldoRes.saldo || 0;
-
-  res.send(`
-    <h2>Caja Actual: ${formatGs(saldo)}</h2>
-    <form method="POST" action="/admin/caja">
-      <select name="tipo">
-        <option value="ingreso">Ingreso</option>
-        <option value="egreso">Egreso</option>
-      </select>
-      <input name="monto" type="number" step="0.01" placeholder="Monto" required>
-      <input name="descripcion" placeholder="Descripción">
-      <button>Agregar</button>
-    </form>
-    <h3>Movimientos</h3>
-    <ul>${caja.map(c=>`<li>${new Date(c.fecha).toLocaleString()} - ${c.tipo.toUpperCase()} - ${formatGs(c.monto)} - ${c.descripcion||''}</li>`).join("")}</ul>
-    <a href="/admin">⬅ Volver al dashboard</a>
-  `);
-});
-
-app.post("/admin/caja", async (req,res)=>{
-  const { tipo, monto, descripcion } = req.body;
-  await pool.query("INSERT INTO caja(tipo,monto,descripcion) VALUES($1,$2,$3)", [tipo,monto,descripcion]);
-  res.redirect("/admin/caja");
-});
-
-// ====================== CREDITOS PENDIENTES ======================
-app.get("/admin/creditos", async (req,res)=>{
-  if(!req.session.admin) return res.redirect("/login");
-  const creditos = (await pool.query(`
-    SELECT cv.id as cuota_id, v.id as venta_id, c.nombre, cv.monto
-    FROM cuotas_ventas cv
-    JOIN ventas v ON v.id=cv.venta_id
-    JOIN clientes c ON c.id=v.cliente_id
-    WHERE cv.pagada=false
-    ORDER BY cv.fecha_vencimiento ASC
-  `)).rows;
-
-  res.send(`
-    <h2>Créditos pendientes</h2>
-    ${creditos.map(cr=>`
-      <form method="POST" action="/admin/creditos/pagar">
-        Cliente: ${cr.nombre} | Monto pendiente: ${formatGs(cr.monto)}
-        <input type="hidden" name="cuota_id" value="${cr.cuota_id}">
-        <input type="number" step="0.01" name="monto" placeholder="Monto a pagar" max="${cr.monto}" required>
-        <button>Pagar</button>
-      </form>
-    `).join("")}
-    <a href="/admin">⬅ Volver al dashboard</a>
-  `);
-});
-
-app.post("/admin/creditos/pagar", async (req,res)=>{
-  const { cuota_id, monto } = req.body;
-  const c = await pool.query("SELECT monto, venta_id FROM cuotas_ventas WHERE id=$1",[cuota_id]);
-  if(!c.rows.length) return res.send("Cuota no encontrada");
-  const cuota = c.rows[0];
-  const nuevoMonto = cuota.monto - Number(monto);
-  const pagada = nuevoMonto <= 0;
-  await pool.query("UPDATE cuotas_ventas SET monto=$1, pagada=$2 WHERE id=$3",[nuevoMonto,pagada,cuota_id]);
-  await pool.query("INSERT INTO caja(tipo,monto,descripcion) VALUES('ingreso',$1,$2)",[monto,`Pago cuota venta ${cuota.venta_id}`]);
-  res.redirect("/admin/creditos");
 });
 
 // ====================== START SERVER ======================
