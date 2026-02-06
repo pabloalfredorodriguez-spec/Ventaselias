@@ -177,7 +177,17 @@ app.get("/admin", async (req,res)=>{
         </form>
 
         <h3>Clientes</h3>
-        <ul>${clientes.map(c=>`<li>${c.nombre} (${c.tipo})</li>`).join("")}</ul>
+<ul>
+  ${clientes.map(c => `
+    <li>
+      ${c.nombre} (${c.tipo})
+      <form method="POST" action="/admin/clientes/eliminar" style="display:inline">
+        <input type="hidden" name="id" value="${c.id}">
+        <button type="submit" style="background:red;color:white;border:none;border-radius:3px;padding:3px 6px;">Eliminar</button>
+      </form>
+    </li>
+  `).join("")}
+</ul>
 
         <h3>Agregar Producto</h3>
         <form method="POST" action="/admin/productos">
@@ -192,13 +202,17 @@ app.get("/admin", async (req,res)=>{
         </form>
 
         <h3>Productos</h3>
-        <ul>
-          ${productos.map(p => `
-            <li>${p.nombre} - Stock: ${p.stock} - Precio: ${formatGs(p.precio_unitario)}
-            ${p.precio_mayorista ? ' - Mayorista: ' + formatGs(p.precio_mayorista) : ''}
-            - Costo: ${formatGs(p.costo_unitario)} - Utilidad: ${formatGs(p.precio_unitario - p.costo_unitario)}</li>
-          `).join("")}
-        </ul>
+<ul>
+  ${productos.map(p => `
+    <li>
+      ${p.nombre} - Stock: ${p.stock} - Precio: ${formatGs(p.precio_unitario)}
+      <form method="POST" action="/admin/productos/eliminar" style="display:inline">
+        <input type="hidden" name="id" value="${p.id}">
+        <button type="submit" style="background:red;color:white;border:none;border-radius:3px;padding:3px 6px;">Eliminar</button>
+      </form>
+    </li>
+  `).join("")}
+</ul>
       </body>
     </html>
   `);
