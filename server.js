@@ -329,26 +329,53 @@ app.get("/admin/caja", async (req, res) => {
 
   const caja = (await pool.query("SELECT * FROM caja ORDER BY fecha DESC")).rows;
 
-  const totalCaja = caja.reduce((acc, c) => {
-    return c.tipo === 'ingreso' ? acc + Number(c.monto) : acc - Number(c.monto);
-  }, 0);
+  const totalCaja = caja.reduce((acc, c) => (c.tipo === 'ingreso' ? acc + Number(c.monto) : acc - Number(c.monto)), 0);
 
   res.send(`
     <h2>Caja</h2>
     <p><b>Saldo actual:</b> ${formatGs(totalCaja)}</p>
-    <table border="1" cellpadding="5" cellspacing="0">
-      <tr><th>Fecha</th><th>Tipo</th><th>Monto</th><th>Descripción</th></tr>
-      ${caja.map(c => `
-        <tr>
-          <td>${new Date(c.fecha).toLocaleString()}</td>
-          <td>${c.tipo}</td>
-          <td>${formatGs(c.monto)}</td>
-          <td>${c.descripcion || ''}</td>
-        </tr>
-      `).join("")}
-    </table>
+
+    <form method="POST" action="/admin/caja">
+      <label>Tipo:</label>
+      <select name="tipo" required>
+        <option value="ingreso">Ingreso</option>
+        <option value="egreso">Egreso</option>
+      </select>
+      <label>Monto:</label>
+      <input type="number" name="monto" step="0.01" required>
+      <label>Comentario:</label>
+      <input type="text" name="descripcion" required>
+      <button>Agregar</button>
+    </form>
+
+    <button onclick="document.getElementById('movimientos').style.display = 
+      document.getElementById('movimientos').style.display==='none'?'block':'none'">Ver movimientos</button>
+
+    <div id="movimientos" style="display:none; margin-top:10px;">
+      <table border="1" cellpadding="5" cellspacing="0">
+        <tr><th>Fecha</th><th>Tipo</th><th>Monto</th><th>Comentario</th></tr>
+        ${caja.map(c => `
+          <tr>
+            <td>${new Date(c.fecha).toLocaleString()}</td>
+            <td>${c.tipo}</td>
+            <td>${formatGs(c.monto)}</td>
+            <td>${c.descripcion || ''}</td>
+          </tr>
+        `).join("")}
+      </table>
+    </div>
+
     <a href="/admin">⬅ Volver al dashboard</a>
   `);
+});
+
+app.post("/admin/caja", async (req, res) => {
+  if (!req.session.admin) return res.redirect("/login");
+  const { tipo, monto, descripcion } = req.body;
+  if (!tipo || !monto || !descripcion) return res.send("Complete todos los campos");
+
+  await pool.query("INSERT INTO caja(tipo,monto,descripcion) VALUES($1,$2,$3)", [tipo, monto, descripcion]);
+  res.redirect("/admin/caja");
 });
 
 // ====================== CREDITOS PENDIENTES ======================
@@ -356,8 +383,7 @@ app.get("/admin/creditos", async (req, res) => {
   if (!req.session.admin) return res.redirect("/login");
 
   const creditos = (await pool.query(`
-    SELECT cu.id AS cuota_id, v.id AS venta_id, v.cliente_id, v.total, v.tipo, cu.monto, cu.fecha_vencimiento, cu.pagada,
-           cl.nombre AS cliente
+    SELECT cu.id AS cuota_id, v.id AS venta_id, cl.nombre AS cliente, cu.monto, cu.fecha_vencimiento, cu.pagada
     FROM cuotas_ventas cu
     JOIN ventas v ON cu.venta_id = v.id
     JOIN clientes cl ON v.cliente_id = cl.id
@@ -368,9 +394,7 @@ app.get("/admin/creditos", async (req, res) => {
   res.send(`
     <h2>Créditos pendientes</h2>
     <table border="1" cellpadding="5" cellspacing="0">
-      <tr>
-        <th>ID Cuota</th><th>ID Venta</th><th>Cliente</th><th>Monto</th><th>Vencimiento</th><th>Pagada</th>
-      </tr>
+      <tr><th>Cuota ID</th><th>Venta ID</th><th>Cliente</th><th>Monto pendiente</th><th>Vencimiento</th><th>Acción</th></tr>
       ${creditos.map(c => `
         <tr>
           <td>${c.cuota_id}</td>
@@ -378,13 +402,49 @@ app.get("/admin/creditos", async (req, res) => {
           <td>${c.cliente}</td>
           <td>${formatGs(c.monto)}</td>
           <td>${new Date(c.fecha_vencimiento).toLocaleDateString()}</td>
-          <td>${c.pagada ? 'Sí' : 'No'}</td>
+          <td>
+            <form method="POST" action="/admin/creditos/pagar">
+              <input type="hidden" name="cuota_id" value="${c.cuota_id}">
+              <input type="number" name="pago" step="0.01" max="${c.monto}" placeholder="Monto a pagar" required>
+              <button>Pagar</button>
+            </form>
+          </td>
         </tr>
       `).join("")}
     </table>
     <a href="/admin">⬅ Volver al dashboard</a>
   `);
 });
+
+app.post("/admin/creditos/pagar", async (req,res) => {
+  if (!req.session.admin) return res.redirect("/login");
+
+  const { cuota_id, pago } = req.body;
+  const montoPago = Number(pago);
+
+  if(!montoPago || montoPago <= 0) return res.send("Monto inválido");
+
+  // Traer la cuota
+  const cuotaRes = await pool.query("SELECT * FROM cuotas_ventas WHERE id=$1", [cuota_id]);
+  if(cuotaRes.rows.length === 0) return res.send("Cuota no encontrada");
+
+  const cuota = cuotaRes.rows[0];
+  const nuevoMonto = cuota.monto - montoPago;
+
+  // Actualizar cuota
+  if(nuevoMonto <= 0){
+    await pool.query("UPDATE cuotas_ventas SET monto=0, pagada=true WHERE id=$1", [cuota_id]);
+  } else {
+    await pool.query("UPDATE cuotas_ventas SET monto=$1 WHERE id=$2", [nuevoMonto, cuota_id]);
+  }
+
+  // Registrar ingreso en caja
+  await pool.query("INSERT INTO caja(tipo,monto,descripcion) VALUES('ingreso',$1,$2)", 
+    [montoPago, `Pago parcial cuota ID ${cuota_id}`]);
+
+  res.redirect("/admin/creditos");
+});
+
 // ====================== AGREGAR CLIENTES / PRODUCTOS ======================
 app.post("/admin/clientes", async (req, res)=>{
   const { nombre, tipo, documento, telefono } = req.body;
