@@ -204,6 +204,187 @@ app.get("/admin", async (req,res)=>{
   `);
 });
 
+// ====================== REGISTRAR VENTA ======================
+app.get("/admin/registrar-venta", async (req,res)=>{
+  if(!req.session.admin) return res.redirect("/login");
+  const clientes = (await pool.query("SELECT * FROM clientes")).rows;
+  const productos = (await pool.query("SELECT * FROM productos")).rows;
+
+  let productosHtml = productos.map(p => `
+    <div>
+      <input type="checkbox" name="productos[]" value="${p.id}"> ${p.nombre} - Stock: ${p.stock}
+      <input type="number" name="cant_${p.id}" placeholder="Cantidad" min="1" style="width:60px;">
+      <select name="precio_${p.id}">
+        <option value="${p.precio_unitario}">Minorista: ${formatGs(p.precio_unitario)}</option>
+        ${p.precio_mayorista ? `<option value="${p.precio_mayorista}">Mayorista: ${formatGs(p.precio_mayorista)}</option>` : ''}
+      </select>
+    </div>
+  `).join("");
+
+  res.send(`
+    <h2>Registrar Venta</h2>
+    <form method="POST" action="/admin/registrar-venta">
+      Cliente:
+      <select name="cliente_id" required>
+        ${clientes.map(c=>`<option value="${c.id}">${c.nombre} (${c.tipo})</option>`).join("")}
+      </select>
+      <br/>
+      Tipo de venta:
+      <select name="tipo">
+        <option value="contado">Contado</option>
+        <option value="credito">Crédito</option>
+      </select>
+      <h3>Productos</h3>
+      ${productosHtml}
+      <br/>
+      <button>Registrar Venta</button>
+    </form>
+    <a href="/admin">⬅ Volver al dashboard</a>
+  `);
+});
+
+// POST de registrar venta
+app.post("/admin/registrar-venta", async (req,res)=>{
+  const { cliente_id, tipo, productos: prodIds } = req.body;
+  if(!prodIds) return res.send("Seleccione al menos un producto");
+
+  const ids = Array.isArray(prodIds) ? prodIds : [prodIds];
+  let total = 0;
+  let detalles = [];
+
+  for(const pid of ids){
+    const cant = Number(req.body[`cant_${pid}`]);
+    const precio = Number(req.body[`precio_${pid}`]);
+    total += cant * precio;
+    detalles.push({ pid, cant, precio });
+  }
+
+  try{
+    const ventaRes = await pool.query(
+      "INSERT INTO ventas(cliente_id,total,tipo) VALUES($1,$2,$3) RETURNING id",
+      [cliente_id, total, tipo]
+    );
+    const venta_id = ventaRes.rows[0].id;
+
+    for(const d of detalles){
+      await pool.query(
+        "INSERT INTO detalle_ventas(venta_id,producto_id,cantidad,precio_unitario) VALUES($1,$2,$3,$4)",
+        [venta_id, d.pid, d.cant, d.precio]
+      );
+      await pool.query("UPDATE productos SET stock=stock-$1 WHERE id=$2", [d.cant, d.pid]);
+    }
+
+    if(tipo === "contado"){
+      await pool.query(
+        "INSERT INTO caja(tipo,monto,descripcion) VALUES('ingreso',$1,$2)",
+        [total, `Venta contado ID ${venta_id}`]
+      );
+    } else {
+      await pool.query(
+        "INSERT INTO cuotas_ventas(venta_id,numero,monto,fecha_vencimiento) VALUES($1,1,$2,NOW()::date + INTERVAL '22 day')",
+        [venta_id, total]
+      );
+    }
+
+    res.redirect("/admin/ventas");
+  } catch(err){
+    res.send(`<pre>Error: ${err.message}</pre>`);
+  }
+});
+
+// ====================== LISTADO VENTAS ======================
+app.get("/admin/ventas", async (req, res) => {
+  if (!req.session.admin) return res.redirect("/login");
+
+  const ventas = (await pool.query(`
+    SELECT v.id, v.fecha, v.total, v.tipo, c.nombre AS cliente
+    FROM ventas v
+    LEFT JOIN clientes c ON v.cliente_id = c.id
+    ORDER BY v.fecha DESC
+  `)).rows;
+
+  res.send(`
+    <h2>Ventas realizadas</h2>
+    <table border="1" cellpadding="5" cellspacing="0">
+      <tr>
+        <th>ID</th><th>Fecha</th><th>Cliente</th><th>Total</th><th>Tipo</th>
+      </tr>
+      ${ventas.map(v => `
+        <tr>
+          <td>${v.id}</td>
+          <td>${new Date(v.fecha).toLocaleString()}</td>
+          <td>${v.cliente || 'Mostrador'}</td>
+          <td>${formatGs(v.total)}</td>
+          <td>${v.tipo}</td>
+        </tr>
+      `).join("")}
+    </table>
+    <a href="/admin">⬅ Volver al dashboard</a>
+  `);
+});
+
+// ====================== CAJA ======================
+app.get("/admin/caja", async (req, res) => {
+  if (!req.session.admin) return res.redirect("/login");
+
+  const caja = (await pool.query("SELECT * FROM caja ORDER BY fecha DESC")).rows;
+
+  const totalCaja = caja.reduce((acc, c) => {
+    return c.tipo === 'ingreso' ? acc + Number(c.monto) : acc - Number(c.monto);
+  }, 0);
+
+  res.send(`
+    <h2>Caja</h2>
+    <p><b>Saldo actual:</b> ${formatGs(totalCaja)}</p>
+    <table border="1" cellpadding="5" cellspacing="0">
+      <tr><th>Fecha</th><th>Tipo</th><th>Monto</th><th>Descripción</th></tr>
+      ${caja.map(c => `
+        <tr>
+          <td>${new Date(c.fecha).toLocaleString()}</td>
+          <td>${c.tipo}</td>
+          <td>${formatGs(c.monto)}</td>
+          <td>${c.descripcion || ''}</td>
+        </tr>
+      `).join("")}
+    </table>
+    <a href="/admin">⬅ Volver al dashboard</a>
+  `);
+});
+
+// ====================== CREDITOS PENDIENTES ======================
+app.get("/admin/creditos", async (req, res) => {
+  if (!req.session.admin) return res.redirect("/login");
+
+  const creditos = (await pool.query(`
+    SELECT cu.id AS cuota_id, v.id AS venta_id, v.cliente_id, v.total, v.tipo, cu.monto, cu.fecha_vencimiento, cu.pagada,
+           cl.nombre AS cliente
+    FROM cuotas_ventas cu
+    JOIN ventas v ON cu.venta_id = v.id
+    JOIN clientes cl ON v.cliente_id = cl.id
+    WHERE cu.pagada = false
+    ORDER BY cu.fecha_vencimiento ASC
+  `)).rows;
+
+  res.send(`
+    <h2>Créditos pendientes</h2>
+    <table border="1" cellpadding="5" cellspacing="0">
+      <tr>
+        <th>ID Cuota</th><th>ID Venta</th><th>Cliente</th><th>Monto</th><th>Vencimiento</th><th>Pagada</th>
+      </tr>
+      ${creditos.map(c => `
+        <tr>
+          <td>${c.cuota_id}</td>
+          <td>${c.venta_id}</td>
+          <td>${c.cliente}</td>
+          <td>${formatGs(c.monto)}</td>
+          <td>${new Date(c.fecha_vencimiento).toLocaleDateString()}</td>
+          <td>${c.pagada ? 'Sí' : 'No'}</td>
+        </tr>
+      `).join("")}
+    </table>
+    <a href="/admin">⬅ Volver al dashboard</a>
+  `);
+});
 // ====================== AGREGAR CLIENTES / PRODUCTOS ======================
 app.post("/admin/clientes", async (req, res)=>{
   const { nombre, tipo, documento, telefono } = req.body;
