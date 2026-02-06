@@ -481,11 +481,6 @@ app.post("/admin/clientes/eliminar", async (req,res)=>{
   }
 });
 
-// Agregar producto
-app.post("/admin/productos", async (req, res) => {
-  ...
-});
-
 app.post("/admin/productos/eliminar", async (req,res)=>{
   const { id } = req.body;
   try {
@@ -495,6 +490,7 @@ app.post("/admin/productos/eliminar", async (req,res)=>{
     res.send(`<pre>Error al eliminar producto: ${err.message}</pre>`);
   }
 });
+
 // ====================== START SERVER ======================
 (async function startServer() {
   await initDB();
