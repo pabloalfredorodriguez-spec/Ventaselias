@@ -156,14 +156,21 @@ app.get("/login", (req, res) => {
   `);
 });
 
-app.post("/login", async (req, res) => {
+app.post("/login", (req, res) => {
   const { user, pass } = req.body;
-  if (user === ADMIN_USER && ADMIN_PASS_HASH && (await bcrypt.compare(pass, ADMIN_PASS_HASH))) {
+
+  const adminUser = process.env.ADMIN_USER || "admin";
+  const adminPass = process.env.ADMIN_PASS || "1234";  // ← puedes cambiar "1234" aquí si quieres otra contraseña
+
+  if (user === adminUser && pass === adminPass) {
     req.session.admin = true;
     res.redirect("/admin");
   } else {
     res.send(`
-      <script>alert('Credenciales incorrectas'); window.location='/login';</script>
+      <script>
+        alert('Credenciales incorrectas');
+        window.location='/login';
+      </script>
     `);
   }
 });
